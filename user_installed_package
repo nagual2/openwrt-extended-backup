@@ -26,16 +26,11 @@ BEGIN { RS = ""; FS = "\n" }  # Разделитель записей — пус
     
     if (pkg_name != "" && !auto_installed) {
         if (pkg_name ~ /luci-i18n-/) {
-            luci_pkgs = luci_pkgs "\n" "opkg install " pkg_name
+            print "2 " pkg_name  # Помечаем luci-i18n для сортировки
         } else {
-            std_pkgs = std_pkgs "\n" "opkg install " pkg_name
+            print "1 " pkg_name  # Остальные пакеты
         }
     }
-}
-END {
-    # Сначала выводим обычные пакеты, затем luci-i18n-
-    print std_pkgs
-    print luci_pkgs
-}' /usr/lib/opkg/status | grep -v "^$" | sort
+}' /usr/lib/opkg/status | sort -k1,1n -k2 | cut -d' ' -f2- | xargs -I{} echo "opkg install {}"
 
 echo "==============================================="
