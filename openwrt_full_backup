@@ -5,7 +5,7 @@ clear
 echo Создаём архив. Пожалуйста, подождите две минуты, процесс идёт...
 echo =================================================================
 
-SYS_ARCHIVE_FILENAME="backup-RouteRich-$(date +'%Y-%m-%d_%H-%M')"
+SYS_ARCHIVE_FILENAME="fullbackup_$(uci get system.@system[0].hostname)-$(date +'%Y-%m-%d_%H-%M')"
 SHARE_NAME="archive"
 OUTPUT_DIRECTORY="/tmp/archive/"
 
@@ -15,11 +15,6 @@ NC='\033[0m'
 
 mkdir -p $OUTPUT_DIRECTORY
 chmod 777 $OUTPUT_DIRECTORY
-
-# Создаём костыль, формирующий при каждой загрузке системы директорию /tmp/archive
-# echo -e '#!/bin/sh /etc/rc.common\n\nSTART=99\n\nboot() {\n    mkdir -p /tmp/archive && chmod 0777 /tmp/archive\n}' > /etc/init.d/mkarchive
-# chmod +x /etc/init.d/mkarchive
-# /etc/init.d/mkarchive disable
 
 echo Копируем overlay
 
@@ -50,27 +45,34 @@ rm -rf /tmp/backup_staging/overlay
 #ksmbd.addshare -a $SHARE_NAME  -o 'path='$OUTPUT_DIRECTORY -o 'browseable=yes' -o 'writeable=yes' -o 'read only = no' -o 'guest ok = yes' -o 'directory mask = 0777' -o 'create mask = 0666' >/dev/null
 
 # Ищем шару
-NAME="$SHARE_NAME"
-INDEX=$(uci show ksmbd | grep '=share' | cut -d[ -f2 | cut -d] -f1 | while read i; do
-    [ "$(uci get ksmbd.@share[$i].name)" = "$NAME" ] && echo $i && break 
-done)
+UCI_SHARE_INDEX=""
 
-# Удаляем шару
-[ -n "$INDEX" ] && uci delete ksmbd.@share[$INDEX] && uci commit ksmbd && /etc/init.d/ksmbd restart
+for i in $(uci show ksmbd | grep '=share' | cut -d[ -f2 | cut -d] -f1); do
+    if uci get ksmbd.@share[$i].name >/dev/null 2>&1; then
+        NAME=$(uci get ksmbd.@share[$i].name)
+        if [ "$NAME" = "$SHARE_NAME" ]; then
+            UCI_SHARE_INDEX=$i
+            break
+        fi
+    fi
+done
 
-sleep 2
-
-echo Создаём сетевую папку
-# Создаём шару 
-uci add ksmbd share >/dev/null
-uci set ksmbd.@share[-1].name="$SHARE_NAME"
-uci set ksmbd.@share[-1].path="$OUTPUT_DIRECTORY"
-uci set ksmbd.@share[-1].guest_ok="yes"
-uci set ksmbd.@share[-1].read_only="no"
-uci set ksmbd.@share[-1].create_mask="0777"
-uci set ksmbd.@share[-1].dir_mask="0777"
-uci set ksmbd.@share[-1].inherit_owner="yes"
-uci commit ksmbd
+if [ -z "$UCI_SHARE_INDEX" ]; then
+	# Удаляем шару
+	# [ -n "$UCI_SHARE_INDEX" ] && uci delete ksmbd.@share[$INDEX] && uci commit ksmbd && /etc/init.d/ksmbd restart
+	# sleep 2
+	echo Создаём сетевую папку
+	# Создаём шару 
+	uci add ksmbd share >/dev/null
+	uci set ksmbd.@share[-1].name="$SHARE_NAME"
+	uci set ksmbd.@share[-1].path="$OUTPUT_DIRECTORY"
+	uci set ksmbd.@share[-1].guest_ok="yes"
+	uci set ksmbd.@share[-1].read_only="no"
+	uci set ksmbd.@share[-1].create_mask="0777"
+	uci set ksmbd.@share[-1].dir_mask="0777"
+	uci set ksmbd.@share[-1].inherit_owner="yes"
+	uci commit ksmbd
+fi
 
 sleep 2
 
@@ -84,4 +86,4 @@ HOST=$(uci get system.@system[0].hostname)
 # Вывод итогов
 printf "\n✅ ${YELLOW}Готово! Архив доступен по адресам"; echo; echo
 printf "${YELLOW}\\\\\\\\%s\\\\%s${NC}\n" "$IP" "$SHARE_NAME"
-printf "${YELLOW}\\\\\\\\%s.lan\\\\%s${NC}\n" "$HOST" "$SHARE_NAME"; echo; echo
+printf "${YELLOW}\\\\\\\\%s\\\\%s${NC}\n" "$HOST" "$SHARE_NAME"; echo; echo
