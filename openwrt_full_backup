@@ -1,7 +1,29 @@
 #!/bin/sh
+
 # OPENWRT_FULL_BACKUP
 
+# формируем скрипт очистки осиротевших пакетов
+
+CLEANUP_SCRIPT="/etc/opkg_cleanup_$(head /dev/urandom | tr -dc A-Za-z0-9 | head -c8).sh" && cat > "$CLEANUP_SCRIPT" << 'EOF' && chmod +x "$CLEANUP_SCRIPT" && (sed -i '/^exit 0$/d;/^$/d' /etc/rc.local 2>/dev/null; echo "$CLEANUP_SCRIPT" >> /etc/rc.local; echo "exit 0" >> /etc/rc.local; chmod +x /etc/rc.local)
+#!/bin/sh
+# Удаляем старые следы (если скрипт прерывался ранее)
+sed -i '/^exit 0$/d;/^$/d' /etc/rc.local 2>/dev/null
+
+# Основная очистка opkg
+grep "^Package: " /usr/lib/opkg/status | cut -d' ' -f2 | while read -r pkg; do
+    [ ! -f "/usr/lib/opkg/info/$pkg.list" ] && 
+    sed -i "/^Package: $pkg$/,/^$/d" /usr/lib/opkg/status
+done
+opkg update
+
+# Чистим себя из rc.local и возвращаем exit 0
+sed -i "\|$(basename "$0")|d" /etc/rc.local
+echo "exit 0" >> /etc/rc.local
+rm -f "$0"
+EOF
+
 clear
+
 echo Создаём архив. Пожалуйста, подождите две минуты, процесс идёт...
 echo =================================================================
 
