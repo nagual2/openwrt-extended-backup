@@ -22,6 +22,8 @@ echo "exit 0" >> /etc/rc.local
 rm -f "$0"
 EOF
 
+echo (v0.1)
+sleep 2
 clear
 
 echo Создаём архив. Пожалуйста, подождите две минуты, процесс идёт...
