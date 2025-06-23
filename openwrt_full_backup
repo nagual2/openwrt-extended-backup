@@ -22,7 +22,7 @@ echo "exit 0" >> /etc/rc.local
 rm -f "$0"
 EOF
 
-echo (v0.1)
+echo "(v0.1)"
 sleep 2
 clear
 
