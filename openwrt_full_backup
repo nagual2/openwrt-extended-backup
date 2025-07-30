@@ -2,20 +2,18 @@
 
 # OPENWRT_FULL_BACKUP
 
-
 clear
-echo "(v0.2)"
+echo "(v0.3)"
 sleep 2
 clear
 ksmbd_otkaz=0
 
-
 # Проверяем, установлен ли ksmbd
 if ! opkg list-installed | grep -q '^ksmbd-server'; then
     # Задаем вопрос об установке
-    printf "Установить ksmbd для доступа к роутеру по сети? \033[1;32mY\033[0m/\033[0mn: "
+    printf "Установить ksmbd для доступа к роутеру по сети? (\033[1;32mY\033[0m/\033[0mn): "
     read answer
-    
+
     # Обрабатываем ответ (по умолчанию Y)
     case "${answer:-Y}" in
         [Yy]*) 
@@ -97,6 +95,9 @@ rm -rf /tmp/backup_staging/overlay
 #ksmbd.addshare -d $SHARE_NAME >/dev/null
 #ksmbd.addshare -a $SHARE_NAME  -o 'path='$OUTPUT_DIRECTORY -o 'browseable=yes' -o 'writeable=yes' -o 'read only = no' -o 'guest ok = yes' -o 'directory mask = 0777' -o 'create mask = 0666' >/dev/null
 
+KSMBD_USER="RR"
+KSMBD_PASSWORD="12345"
+ksmbd.adduser $KSMBD_USER -p $KSMBD_PASSWORD >/dev/null
 
 if [ "$ksmbd_otkaz" != "1" ]; then
 	# Ищем шару
@@ -119,13 +120,13 @@ if [ "$ksmbd_otkaz" != "1" ]; then
 		echo Создаём сетевую папку
 		# Создаём шару 
 		uci add ksmbd share >/dev/null
-		uci set ksmbd.@share[-1].name="$SHARE_NAME"
+		uci set ksmbd.@share[-1].name="${SHARE_NAME}"
 		uci set ksmbd.@share[-1].path="$OUTPUT_DIRECTORY"
 		uci set ksmbd.@share[-1].guest_ok="yes"
 		uci set ksmbd.@share[-1].read_only="no"
 		uci set ksmbd.@share[-1].create_mask="0777"
 		uci set ksmbd.@share[-1].dir_mask="0777"
-		#uci set ksmbd.@share[-1].inherit_owner="yes"
+		uci set ksmbd.@share[-1].users="${KSMBD_USER}"
 		uci commit ksmbd
 	fi
 fi
@@ -141,7 +142,11 @@ if [ "$ksmbd_otkaz" != "1" ]; then
     printf "\n✅ ${YELLOW}Готово! Архив доступен по адресам\n\n"
     printf "${YELLOW}\\\\\\\\%s\\\\%s${NC}\n" "$IP" "$SHARE_NAME"
     printf "${YELLOW}\\\\\\\\%s\\\\%s${NC}\n" "$HOST" "$SHARE_NAME"
-    printf "\n"
+	echo
+	echo Если запросит пароль, ввести:
+	echo Логин:  $KSMBD_USER 
+	echo Пароль: $KSMBD_PASSWORD 
+    echo
 else
 	echo
     printf "${YELLOW}Архив сохранён в папке ${GREEN}/tmp/archive${NC} на роутере и недоступен через сетевые шары.${NC}\n\n"
