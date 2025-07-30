@@ -95,11 +95,12 @@ rm -rf /tmp/backup_staging/overlay
 #ksmbd.addshare -d $SHARE_NAME >/dev/null
 #ksmbd.addshare -a $SHARE_NAME  -o 'path='$OUTPUT_DIRECTORY -o 'browseable=yes' -o 'writeable=yes' -o 'read only = no' -o 'guest ok = yes' -o 'directory mask = 0777' -o 'create mask = 0666' >/dev/null
 
-KSMBD_USER="RR"
-KSMBD_PASSWORD="12345"
-ksmbd.adduser $KSMBD_USER -p $KSMBD_PASSWORD >/dev/null
-
 if [ "$ksmbd_otkaz" != "1" ]; then
+	# Создаём, или обновляем пользователя
+	KSMBD_USER="RR"
+	KSMBD_PASSWORD="12345"
+	ksmbd.adduser $KSMBD_USER -p $KSMBD_PASSWORD >/dev/null
+
 	# Ищем шару
 	UCI_SHARE_INDEX=""
 
