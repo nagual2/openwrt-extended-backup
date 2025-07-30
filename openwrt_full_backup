@@ -139,15 +139,15 @@ if [ "$ksmbd_otkaz" != "1" ]; then
 	HOST=$(uci get system.@system[0].hostname)
 	sleep 2
 	/etc/init.d/ksmbd restart
-    printf "\n✅ ${YELLOW}Готово! Архив доступен по адресам\n\n"
-    printf "${YELLOW}\\\\\\\\%s\\\\%s${NC}\n" "$IP" "$SHARE_NAME"
-    printf "${YELLOW}\\\\\\\\%s\\\\%s${NC}\n" "$HOST" "$SHARE_NAME"
+        printf "\n✅ ${YELLOW}Готово! Архив доступен по адресам\n\n"
+        printf "${YELLOW}\\\\\\\\%s\\\\%s${NC}\n" "$IP" "$SHARE_NAME"
+        printf "${YELLOW}\\\\\\\\%s\\\\%s${NC}\n" "$HOST" "$SHARE_NAME"
 	echo
 	echo Если запросит пароль, ввести:
 	echo Логин:  $KSMBD_USER 
 	echo Пароль: $KSMBD_PASSWORD 
-    echo
+        echo
 else
 	echo
-    printf "${YELLOW}Архив сохранён в папке ${GREEN}/tmp/archive${NC} на роутере и недоступен через сетевые шары.${NC}\n\n"
+        printf "${YELLOW}Архив сохранён в папке ${GREEN}/tmp/archive ${YELLOW}на роутере и недоступен через сетевые шары.${NC}\n\n"
 fi
