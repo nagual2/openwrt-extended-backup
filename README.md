@@ -37,5 +37,5 @@ chmod +x /backup && /backup
 Запуск скрипта:
 
 ```
-sh <(wget -qO- https://raw.githubusercontent.com/kkkkCampbell/master/refs/heads/main/user_installed_package)
+sh <(wget -qO- https://raw.githubusercontent.com/kkkkCampbell/master/refs/heads/main/user_installed_packages)
 ```
