@@ -30,7 +30,7 @@ wget https://raw.githubusercontent.com/kkkkCampbell/master/refs/heads/main/openw
 chmod +x /backup && /backup
 ```
 
-# user_installed_package
+# user_installed_packages
 
 Выводит список пакетов, установленных на OpenWRT пользователем. Руками, или через скрипты.
 
