@@ -29,6 +29,11 @@ if ! opkg list-installed | grep -q '^ksmbd-server'; then
     esac
 fi
 
+if ! opkg list-installed | grep -q '^tar'; then
+	opkg update
+	opkg install tar
+fi
+
 
 # формируем скрипт очистки осиротевших пакетов
 
