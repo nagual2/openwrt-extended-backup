@@ -30,6 +30,9 @@ if ! opkg list-installed | grep -q '^ksmbd-server'; then
 fi
 
 if ! opkg list-installed | grep -q '^tar'; then
+	echo Устанавливаем полную версию tar
+	echo ================================
+	echo
 	opkg update
 	opkg install tar
 fi
