@@ -74,8 +74,14 @@ chmod 777 $OUTPUT_DIRECTORY
 
 # Создаём итоговый архив
 echo Сжимаем файлы
-
-tar -czpf "$OUTPUT_DIRECTORY$SYS_ARCHIVE_FILENAME.tar.gz" --preserve-permissions --same-owner --exclude='overlay/work' --exclude='overlay/upper/run' /overlay 2>/dev/null
+tar -czpf "$OUTPUT_DIRECTORY$SYS_ARCHIVE_FILENAME.tar.gz" \
+    --preserve-permissions \
+    --same-owner \
+    --exclude='/overlay/work' \
+    --exclude='/overlay/upper/run' \
+    --exclude='/overlay/upper/etc/os-release' \
+    --exclude='/overlay/upper/usr/lib/os-release' \
+    /overlay 2>/dev/null
 
 if [ "$ksmbd_otkaz" != "1" ]; then
 	# Создаём, или обновляем пользователя
