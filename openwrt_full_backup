@@ -3,7 +3,7 @@
 # OPENWRT_FULL_BACKUP
 
 clear
-echo "(v0.4)"
+echo "(v0.4.1)"
 sleep 2
 clear
 ksmbd_otkaz=0
