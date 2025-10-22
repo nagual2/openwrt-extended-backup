@@ -1,5 +1,51 @@
 #!/bin/sh
 
+PROGRAM=$(basename "$0")
+SCRIPT_PATH=$0
+
+case "$SCRIPT_PATH" in
+*/*)
+	SCRIPT_SOURCE=$(dirname "$SCRIPT_PATH")
+	;;
+*)
+	LOOKUP=$(command -v -- "$SCRIPT_PATH" 2>/dev/null)
+	if [ -n "$LOOKUP" ]; then
+		SCRIPT_SOURCE=$(dirname "$LOOKUP")
+	else
+		SCRIPT_SOURCE='.'
+	fi
+	;;
+esac
+
+if ! SCRIPT_DIR=$(cd "$SCRIPT_SOURCE" 2>/dev/null && pwd); then
+	printf '%s: unable to determine script directory\n' "$PROGRAM" >&2
+	exit 1
+fi
+PROJECT_ROOT=$(dirname "$SCRIPT_DIR")
+VERSION_FILE="${PROJECT_ROOT}/VERSION"
+VERSION_FALLBACK='0.4.1'
+
+if [ -r "$VERSION_FILE" ]; then
+	VERSION=$(head -n 1 "$VERSION_FILE")
+fi
+
+if [ -z "$VERSION" ]; then
+	VERSION=$VERSION_FALLBACK
+fi
+
+show_version() {
+	printf '%s version %s\n' "$PROGRAM" "$VERSION"
+}
+
+for arg in "$@"; do
+	case "$arg" in
+	-V | --version)
+		show_version
+		exit 0
+		;;
+	esac
+done
+
 clear
 
 printf '\n'

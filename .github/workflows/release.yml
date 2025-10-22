@@ -1,0 +1,51 @@
+name: Release
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - id: release
+        uses: google-github-actions/release-please-action@v4
+        with:
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
+
+      - name: Checkout repository
+        if: steps.release.outputs.release_created == 'true'
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ steps.release.outputs.tag_name }}
+
+      - name: Prepare release artifacts
+        if: steps.release.outputs.release_created == 'true'
+        run: |
+          TAG_NAME="${{ steps.release.outputs.tag_name }}"
+          WORKDIR="openwrt-toolkit-${TAG_NAME}"
+          mkdir -p "dist/${WORKDIR}/scripts"
+          cp CHANGELOG.md README.md VERSION openwrt_full_backup user_installed_packages "dist/${WORKDIR}/"
+          cp scripts/openwrt_full_backup scripts/user_installed_packages "dist/${WORKDIR}/scripts/"
+          tar -czf "dist/${WORKDIR}.tar.gz" -C dist "${WORKDIR}"
+          (cd dist && zip -9 -r "${WORKDIR}.zip" "${WORKDIR}")
+
+      - name: Upload release assets
+        if: steps.release.outputs.release_created == 'true'
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ steps.release.outputs.tag_name }}
+          files: |
+            dist/openwrt-toolkit-${{ steps.release.outputs.tag_name }}.tar.gz
+            dist/openwrt-toolkit-${{ steps.release.outputs.tag_name }}.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
