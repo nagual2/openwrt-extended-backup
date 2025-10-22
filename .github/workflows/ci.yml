@@ -1,0 +1,26 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install ShellCheck and shfmt
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y shellcheck curl
+          curl -sSL https://github.com/mvdan/sh/releases/download/v3.7.0/shfmt_v3.7.0_linux_amd64 -o shfmt
+          sudo install -m 755 shfmt /usr/local/bin/shfmt
+
+      - name: Verify formatting
+        run: shfmt -d scripts/openwrt_full_backup scripts/user_installed_packages
+
+      - name: Run ShellCheck
+        run: shellcheck scripts/openwrt_full_backup scripts/user_installed_packages
