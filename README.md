@@ -1,4 +1,5 @@
 # openwrt_full_backup
+[![CI](https://github.com/nagual2/openwrt-extended-backup/actions/workflows/ci.yml/badge.svg)](https://github.com/nagual2/openwrt-extended-backup/actions/workflows/ci.yml)
 
 Скрипт создаёт полную архивную копию роутера под управлением OpenWRT.
 Архивируются все настройки и все установленные пользователем программы.
@@ -22,7 +23,7 @@
 #### /backup  
   
 Если в системе не установлен ksmbd, будет предложено его установить.  
-При отказе от установки ksmbd архив забирать из папки /tmp/archive роутера (SCP/FTP), при согласии из \\\\router.ip.add.ress\archive  
+При отказе от установки ksmbd архив забирать из папки /tmp/archive роутера (SCP/FTP), при согласии из \\router.ip.add.ress\archive  
 
 На запрос авторизации при доступе к роутеру по локальной сети (актуально для Windows 11 в основном) ввести:
   
@@ -31,7 +32,7 @@
   
 Запуск скрипта:
 ```
-wget https://raw.githubusercontent.com/kkkkCampbell/master/refs/heads/main/openwrt_full_backup -O /backup && \
+wget https://raw.githubusercontent.com/nagual2/openwrt-extended-backup/main/scripts/openwrt_full_backup -O /backup && \
 chmod +x /backup && /backup
 ```
 
@@ -42,5 +43,5 @@ chmod +x /backup && /backup
 Запуск скрипта:
 
 ```
-sh <(wget -qO- https://raw.githubusercontent.com/kkkkCampbell/master/refs/heads/main/user_installed_packages)
+sh <(wget -qO- https://raw.githubusercontent.com/nagual2/openwrt-extended-backup/main/scripts/user_installed_packages)
 ```
