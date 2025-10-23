@@ -5,45 +5,48 @@ SCRIPT_PATH=$0
 
 case "$SCRIPT_PATH" in
 */*)
-	SCRIPT_SOURCE=$(dirname "$SCRIPT_PATH")
-	;;
+    SCRIPT_SOURCE=$(dirname "$SCRIPT_PATH")
+    ;;
 *)
-	LOOKUP=$(command -v -- "$SCRIPT_PATH" 2>/dev/null)
-	if [ -n "$LOOKUP" ]; then
-		SCRIPT_SOURCE=$(dirname "$LOOKUP")
-	else
-		SCRIPT_SOURCE='.'
-	fi
-	;;
+    LOOKUP=$(command -v -- "$SCRIPT_PATH" 2>/dev/null)
+    if [ -n "$LOOKUP" ]; then
+        SCRIPT_SOURCE=$(dirname "$LOOKUP")
+    else
+        SCRIPT_SOURCE='.'
+    fi
+    ;;
 esac
 
 if ! SCRIPT_DIR=$(cd "$SCRIPT_SOURCE" 2>/dev/null && pwd); then
-	printf '%s: unable to determine script directory\n' "$PROGRAM" >&2
-	exit 1
+    printf '%s: unable to determine script directory\n' "$PROGRAM" >&2
+    exit 1
 fi
 PROJECT_ROOT=$(dirname "$SCRIPT_DIR")
 VERSION_FILE="${PROJECT_ROOT}/VERSION"
+SHARE_VERSION_FILE='/usr/share/openwrt-extended-backup/VERSION'
 VERSION_FALLBACK='0.4.1'
 
 if [ -r "$VERSION_FILE" ]; then
-	VERSION=$(head -n 1 "$VERSION_FILE")
+    VERSION=$(head -n 1 "$VERSION_FILE")
+elif [ -r "$SHARE_VERSION_FILE" ]; then
+    VERSION=$(head -n 1 "$SHARE_VERSION_FILE")
 fi
 
 if [ -z "$VERSION" ]; then
-	VERSION=$VERSION_FALLBACK
+    VERSION=$VERSION_FALLBACK
 fi
 
 show_version() {
-	printf '%s version %s\n' "$PROGRAM" "$VERSION"
+    printf '%s version %s\n' "$PROGRAM" "$VERSION"
 }
 
 for arg in "$@"; do
-	case "$arg" in
-	-V | --version)
-		show_version
-		exit 0
-		;;
-	esac
+    case "$arg" in
+    -V | --version)
+        show_version
+        exit 0
+        ;;
+    esac
 done
 
 # OPENWRT_FULL_BACKUP
@@ -57,29 +60,29 @@ ksmbd_otkaz=0
 
 # Проверяем, установлен ли ksmbd
 if ! opkg list-installed | grep -q '^ksmbd-server'; then
-	printf 'Установить ksmbd для доступа к роутеру по сети? (\033[1;32mY\033[0m/\033[0mn): '
-	IFS= read -r answer
+    printf 'Установить ksmbd для доступа к роутеру по сети? (\033[1;32mY\033[0m/\033[0mn): '
+    IFS= read -r answer
 
-	# Обрабатываем ответ (по умолчанию Y)
-	case "${answer:-Y}" in
-	[Yy]*)
-		printf 'Устанавливаем ksmbd...\n'
-		opkg update
-		opkg install luci-i18n-ksmbd-ru ksmbd-avahi-service
-		;;
-	*)
-		printf 'Установка ksmbd отклонена.\n'
-		ksmbd_otkaz=1
-		sleep 2
-		;;
-	esac
+    # Обрабатываем ответ (по умолчанию Y)
+    case "${answer:-Y}" in
+    [Yy]*)
+        printf 'Устанавливаем ksmbd...\n'
+        opkg update
+        opkg install luci-i18n-ksmbd-ru ksmbd-avahi-service
+        ;;
+    *)
+        printf 'Установка ksmbd отклонена.\n'
+        ksmbd_otkaz=1
+        sleep 2
+        ;;
+    esac
 fi
 
 if ! opkg list-installed | grep -q '^tar'; then
-	printf 'Устанавливаем полную версию tar\n'
-	printf '================================\n\n'
-	opkg update
-	opkg install tar
+    printf 'Устанавливаем полную версию tar\n'
+    printf '================================\n\n'
+    opkg update
+    opkg install tar
 fi
 
 # формируем скрипт очистки осиротевших пакетов
@@ -106,8 +109,8 @@ EOF
 chmod +x "$CLEANUP_SCRIPT"
 sed -i '/^exit 0$/d;/^$/d' /etc/rc.local 2>/dev/null
 {
-	echo "$CLEANUP_SCRIPT"
-	echo 'exit 0'
+    echo "$CLEANUP_SCRIPT"
+    echo 'exit 0'
 } >>/etc/rc.local
 chmod +x /etc/rc.local
 
@@ -129,64 +132,64 @@ chmod 777 "$OUTPUT_DIRECTORY"
 
 printf 'Сжимаем файлы\n'
 tar -czpf "${OUTPUT_DIRECTORY}${SYS_ARCHIVE_FILENAME}.tar.gz" \
-	--preserve-permissions \
-	--same-owner \
-	--exclude='/overlay/work' \
-	--exclude='/overlay/upper/run' \
-	--exclude='/overlay/upper/etc/os-release' \
-	--exclude='/overlay/upper/usr/lib/os-release' \
-	/overlay 2>/dev/null
+    --preserve-permissions \
+    --same-owner \
+    --exclude='/overlay/work' \
+    --exclude='/overlay/upper/run' \
+    --exclude='/overlay/upper/etc/os-release' \
+    --exclude='/overlay/upper/usr/lib/os-release' \
+    /overlay 2>/dev/null
 
 if [ "$ksmbd_otkaz" != '1' ]; then
-	# Создаём, или обновляем пользователя
-	KSMBD_USER='RR'
-	KSMBD_PASSWORD='12345'
-	ksmbd.adduser "$KSMBD_USER" -p "$KSMBD_PASSWORD" >/dev/null
+    # Создаём, или обновляем пользователя
+    KSMBD_USER='RR'
+    KSMBD_PASSWORD='12345'
+    ksmbd.adduser "$KSMBD_USER" -p "$KSMBD_PASSWORD" >/dev/null
 
-	# Ищем шару
-	UCI_SHARE_INDEX=''
-	share_indexes=$(uci show ksmbd 2>/dev/null | sed -n 's/^ksmbd\.@share\[\([0-9]\+\)\]=share$/\1/p')
+    # Ищем шару
+    UCI_SHARE_INDEX=''
+    share_indexes=$(uci show ksmbd 2>/dev/null | sed -n 's/^ksmbd\.@share\[\([0-9]\+\)\]=share$/\1/p')
 
-	if [ -n "$share_indexes" ]; then
-		for idx in $share_indexes; do
-			if uci get "ksmbd.@share[$idx].name" >/dev/null 2>&1; then
-				NAME=$(uci get "ksmbd.@share[$idx].name")
-				if [ "$NAME" = "$SHARE_NAME" ]; then
-					UCI_SHARE_INDEX=$idx
-					break
-				fi
-			fi
-		done
-	fi
+    if [ -n "$share_indexes" ]; then
+        for idx in $share_indexes; do
+            if uci get "ksmbd.@share[$idx].name" >/dev/null 2>&1; then
+                NAME=$(uci get "ksmbd.@share[$idx].name")
+                if [ "$NAME" = "$SHARE_NAME" ]; then
+                    UCI_SHARE_INDEX=$idx
+                    break
+                fi
+            fi
+        done
+    fi
 
-	if [ -z "$UCI_SHARE_INDEX" ]; then
-		printf 'Создаём сетевую папку\n'
-		uci add ksmbd share >/dev/null
-		uci set ksmbd.@share[-1].name="$SHARE_NAME"
-		uci set ksmbd.@share[-1].path="$OUTPUT_DIRECTORY"
-		uci set ksmbd.@share[-1].guest_ok='yes'
-		uci set ksmbd.@share[-1].read_only='no'
-		uci set ksmbd.@share[-1].create_mask='0777'
-		uci set ksmbd.@share[-1].dir_mask='0777'
-		uci set ksmbd.@share[-1].users="$KSMBD_USER"
-		uci commit ksmbd
-	fi
+    if [ -z "$UCI_SHARE_INDEX" ]; then
+        printf 'Создаём сетевую папку\n'
+        uci add ksmbd share >/dev/null
+        uci set ksmbd.@share[-1].name="$SHARE_NAME"
+        uci set ksmbd.@share[-1].path="$OUTPUT_DIRECTORY"
+        uci set ksmbd.@share[-1].guest_ok='yes'
+        uci set ksmbd.@share[-1].read_only='no'
+        uci set ksmbd.@share[-1].create_mask='0777'
+        uci set ksmbd.@share[-1].dir_mask='0777'
+        uci set ksmbd.@share[-1].users="$KSMBD_USER"
+        uci commit ksmbd
+    fi
 fi
 
 # Вывод итогов
 if [ "$ksmbd_otkaz" != '1' ]; then
-	printf 'Извлекаем IP и hostname\n'
-	IP=$(ip -4 addr show br-lan | awk '/inet / {print $2}' | cut -d/ -f1)
-	HOST=$(uci get system.@system[0].hostname)
-	sleep 2
-	/etc/init.d/ksmbd restart
+    printf 'Извлекаем IP и hostname\n'
+    IP=$(ip -4 addr show br-lan | awk '/inet / {print $2}' | cut -d/ -f1)
+    HOST=$(uci get system.@system[0].hostname)
+    sleep 2
+    /etc/init.d/ksmbd restart
 
-	printf '\n✅ %s\n\n' "${YELLOW}Готово! Архив доступен по адресам${NC}"
-	printf '%s\n' "${YELLOW}\\\\${IP}\\${SHARE_NAME}${NC}"
-	printf '%s\n' "${YELLOW}\\\\${HOST}\\${SHARE_NAME}${NC}"
-	printf '\nЕсли запросит пароль, ввести:\n'
-	printf 'Логин:  %s\n' "$KSMBD_USER"
-	printf 'Пароль: %s\n\n' "$KSMBD_PASSWORD"
+    printf '\n✅ %s\n\n' "${YELLOW}Готово! Архив доступен по адресам${NC}"
+    printf '%s\n' "${YELLOW}\\\\${IP}\\${SHARE_NAME}${NC}"
+    printf '%s\n' "${YELLOW}\\\\${HOST}\\${SHARE_NAME}${NC}"
+    printf '\nЕсли запросит пароль, ввести:\n'
+    printf 'Логин:  %s\n' "$KSMBD_USER"
+    printf 'Пароль: %s\n\n' "$KSMBD_PASSWORD"
 else
-	printf '\n%s\n\n' "${YELLOW}Архив сохранён в папке ${GREEN}/tmp/archive ${YELLOW}на роутере и недоступен через сетевые шары.${NC}"
+    printf '\n%s\n\n' "${YELLOW}Архив сохранён в папке ${GREEN}/tmp/archive ${YELLOW}на роутере и недоступен через сетевые шары.${NC}"
 fi

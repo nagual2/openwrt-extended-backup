@@ -5,3 +5,8 @@
 
 # macOS metadata
 .DS_Store
+
+# Build artifacts
+build/
+dist/
+*.ipk

@@ -5,162 +5,62 @@ SCRIPT_PATH=$0
 
 case "$SCRIPT_PATH" in
 */*)
-	SCRIPT_SOURCE=$(dirname "$SCRIPT_PATH")
-	;;
+    SCRIPT_SOURCE=$(dirname "$SCRIPT_PATH")
+    ;;
 *)
-	LOOKUP=$(command -v -- "$SCRIPT_PATH" 2>/dev/null)
-	if [ -n "$LOOKUP" ]; then
-		SCRIPT_SOURCE=$(dirname "$LOOKUP")
-	else
-		SCRIPT_SOURCE='.'
-	fi
-	;;
+    LOOKUP=$(command -v -- "$SCRIPT_PATH" 2>/dev/null)
+    if [ -n "$LOOKUP" ]; then
+        SCRIPT_SOURCE=$(dirname "$LOOKUP")
+    else
+        SCRIPT_SOURCE='.'
+    fi
+    ;;
 esac
 
 if ! SCRIPT_DIR=$(cd "$SCRIPT_SOURCE" 2>/dev/null && pwd); then
-	printf '%s: unable to determine script directory\n' "$PROGRAM" >&2
-	exit 1
+    printf '%s: unable to determine script directory\n' "$PROGRAM" >&2
+    exit 1
 fi
 PROJECT_ROOT=$(dirname "$SCRIPT_DIR")
 VERSION_FILE="${PROJECT_ROOT}/VERSION"
+SHARE_VERSION_FILE='/usr/share/openwrt-extended-backup/VERSION'
 VERSION_FALLBACK='0.4.1'
 
 if [ -r "$VERSION_FILE" ]; then
-	VERSION=$(head -n 1 "$VERSION_FILE")
+    VERSION=$(head -n 1 "$VERSION_FILE")
+elif [ -r "$SHARE_VERSION_FILE" ]; then
+    VERSION=$(head -n 1 "$SHARE_VERSION_FILE")
 fi
 
 if [ -z "$VERSION" ]; then
-	VERSION=$VERSION_FALLBACK
+    VERSION=$VERSION_FALLBACK
 fi
 
 show_version() {
-	printf '%s version %s\n' "$PROGRAM" "$VERSION"
+    printf '%s version %s\n' "$PROGRAM" "$VERSION"
 }
 
-show_help() {
-	cat <<EOF
-Usage: $PROGRAM [options]
-
-Detect manually installed opkg packages and print reinstall commands.
-
-Options:
-  -h, --help                   Show this help and exit
-  -V, --version                Show version and exit
-  -s, --status-file PATH       Override path to opkg status file (default: /usr/lib/opkg/status)
-  -u, --user-installed-file PATH
-                               Add package names from an explicit list (one per line)
-  -x, --exclude PATTERN        Exclude packages matching shell PATTERN (repeatable)
-      --include-auto-deps      Include packages marked as Auto-Installed: yes
-
-Environment variables:
-  OPKG_STATUS_FILE             Same as --status-file
-  OPKG_USER_INSTALLED_FILE     Same as --user-installed-file
-EOF
-}
-
-fail() {
-	printf '%s: %s\n' "$PROGRAM" "$1" >&2
-	exit 1
-}
-
-STATUS_FILE=${OPKG_STATUS_FILE-}
-USER_INSTALLED_FILE=${OPKG_USER_INSTALLED_FILE-}
-EXCLUDE_PATTERNS=''
-INCLUDE_AUTO_DEPS=0
-
-while [ $# -gt 0 ]; do
-	case "$1" in
-	-h | --help)
-		show_help
-		exit 0
-		;;
+for arg in "$@"; do
+	case "$arg" in
 	-V | --version)
 		show_version
 		exit 0
 		;;
-	-s | --status-file)
-		if [ $# -lt 2 ]; then
-			fail 'missing argument for --status-file'
-		fi
-		STATUS_FILE=$2
-		shift 2
-		continue
-		;;
-	-u | --user-installed-file)
-		if [ $# -lt 2 ]; then
-			fail 'missing argument for --user-installed-file'
-		fi
-		USER_INSTALLED_FILE=$2
-		shift 2
-		continue
-		;;
-	-x | --exclude)
-		if [ $# -lt 2 ]; then
-			fail 'missing argument for --exclude'
-		fi
-		if [ -z "$EXCLUDE_PATTERNS" ]; then
-			EXCLUDE_PATTERNS=$2
-		else
-			EXCLUDE_PATTERNS="$EXCLUDE_PATTERNS $2"
-		fi
-		shift 2
-		continue
-		;;
-	--include-auto-deps)
-		INCLUDE_AUTO_DEPS=1
-		shift
-		continue
-		;;
-	--)
-		shift
-		break
-		;;
-	-*)
-		fail "unknown option: $1"
-		;;
-	*)
-		fail "unexpected argument: $1"
-		;;
 	esac
-	shift
 done
 
-if [ $# -gt 0 ]; then
-	fail "unexpected positional arguments: $*"
-fi
+clear
 
-if [ -z "$STATUS_FILE" ]; then
-	STATUS_FILE='/usr/lib/opkg/status'
-fi
+printf '\n'
+printf '===============================================\n'
+printf 'opkg update\n'
 
-if [ ! -r "$STATUS_FILE" ]; then
-	fail "unable to read status file: $STATUS_FILE"
-fi
+# Получаем самое старое время установки
+DISTRI_TIME=$(awk '/Installed-Time/ {print $2}' /usr/lib/opkg/status | sort -n | head -n 1)
 
-if [ -z "$USER_INSTALLED_FILE" ]; then
-	for candidate in \
-		/usr/lib/opkg/user-installed.packages \
-		/etc/opkg/user-installed.packages \
-		/var/opkg/user-installed.packages \
-		/usr/lib/opkg/info/user-installed.list; do
-		if [ -r "$candidate" ]; then
-			USER_INSTALLED_FILE=$candidate
-			break
-		fi
-	done
-fi
-
-if [ -n "$USER_INSTALLED_FILE" ] && [ ! -r "$USER_INSTALLED_FILE" ]; then
-	fail "unable to read user-installed file: $USER_INSTALLED_FILE"
-fi
-
-EARLIEST_TIME=$(awk '/^Installed-Time:/ {print $2}' "$STATUS_FILE" | LC_ALL=C sort -n | head -n 1)
-
-STATUS_PACKAGES=$(awk -v include_auto="$INCLUDE_AUTO_DEPS" -v base_time="$EARLIEST_TIME" '
-BEGIN {
-    RS = "";
-    FS = "\n";
-}
+# Генерируем список пакетов, разделяя на обычные и luci-i18n-
+awk -v distri_time="$DISTRI_TIME" '
+BEGIN { RS = ""; FS = "\n" }
 {
     pkg = "";
     status = "";
@@ -201,133 +101,15 @@ BEGIN {
         auto_installed = 1;
     }
 
-    if (!include_auto && auto_installed) {
-        next;
+    if (pkg_name != "" && !auto_installed) {
+        if (pkg_name ~ /luci-i18n-/) {
+            print "2 " pkg_name
+        } else {
+            print "1 " pkg_name
+        }
     }
-
-    if (base_time != "" && installed != "" && installed == base_time) {
-        next;
-    }
-
-    print pkg;
-}
-' "$STATUS_FILE")
-
-USER_PACKAGES=''
-if [ -n "$USER_INSTALLED_FILE" ]; then
-	USER_PACKAGES=$(sed \
-		-e 's/[[:space:]]*#.*$//' \
-		-e 's/[[:space:]]\{1,\}/ /g' \
-		-e 's/^ \{1,\}//' \
-		-e 's/ \{1,\}$//' \
-		"$USER_INSTALLED_FILE" |
-		sed '/^$/d' |
-		awk '{print $1}')
-fi
-
-COMBINED_PACKAGES=$({
-	if [ -n "$STATUS_PACKAGES" ]; then
-		printf '%s\n' "$STATUS_PACKAGES"
-	fi
-	if [ -n "$USER_PACKAGES" ]; then
-		printf '%s\n' "$USER_PACKAGES"
-	fi
-} | tr -d '\r' | sed '/^$/d' | LC_ALL=C sort -u)
-
-is_excluded() {
-	pkg=$1
-
-	if [ -z "$EXCLUDE_PATTERNS" ]; then
-		return 1
-	fi
-
-	for pattern in $EXCLUDE_PATTERNS; do
-		case "$pkg" in
-		$pattern)
-			return 0
-			;;
-		esac
-	done
-
-	return 1
-}
-
-main_packages=''
-luci_packages=''
-main_count=0
-luci_count=0
-
-if [ -n "$COMBINED_PACKAGES" ]; then
-	set -- $COMBINED_PACKAGES
-else
-	set --
-fi
-
-for pkg; do
-	if is_excluded "$pkg"; then
-		continue
-	fi
-
-	case "$pkg" in
-	luci-i18n-*)
-		if [ -z "$luci_packages" ]; then
-			luci_packages=$pkg
-		else
-			luci_packages=$luci_packages"
-$pkg"
-		fi
-		luci_count=$((luci_count + 1))
-		;;
-	*)
-		if [ -z "$main_packages" ]; then
-			main_packages=$pkg
-		else
-			main_packages=$main_packages"
-$pkg"
-		fi
-		main_count=$((main_count + 1))
-		;;
-	esac
-
+}' /usr/lib/opkg/status | sort -k1,1n -k2 | cut -d' ' -f2- | while IFS= read -r pkg; do
+	printf 'opkg install %s\n' "$pkg"
 done
 
-total_count=$((main_count + luci_count))
-
-if [ "$total_count" -eq 0 ]; then
-	printf '# no user-installed opkg packages detected\n'
-	exit 0
-fi
-
-printf '# user-installed opkg packages (%s)\n' "$total_count"
-
-if [ "$main_count" -gt 0 ]; then
-	printf '# main packages (%s)\n' "$main_count"
-	printf '%s\n' "$main_packages"
-fi
-
-if [ "$luci_count" -gt 0 ]; then
-	if [ "$main_count" -gt 0 ]; then
-		printf '\n'
-	fi
-	printf '# LuCI translations (%s)\n' "$luci_count"
-	printf '%s\n' "$luci_packages"
-fi
-
-printf '\n'
-printf 'opkg update\n'
-
-if [ "$main_count" -gt 0 ]; then
-	printf 'opkg install'
-	printf '%s\n' "$main_packages" | while IFS= read -r pkg; do
-		[ -n "$pkg" ] && printf ' %s' "$pkg"
-	done
-	printf '\n'
-fi
-
-if [ "$luci_count" -gt 0 ]; then
-	printf 'opkg install'
-	printf '%s\n' "$luci_packages" | while IFS= read -r pkg; do
-		[ -n "$pkg" ] && printf ' %s' "$pkg"
-	done
-	printf '\n'
-fi
+printf '===============================================\n'
