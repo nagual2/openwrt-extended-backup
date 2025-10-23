@@ -25,6 +25,21 @@
 - (Опционально) Пакет `ksmbd-server`, если планируется загрузка архива по SMB.
 
 ## Установка
+
+### Через пакет .ipk
+1. Соберите пакет самостоятельно (см. раздел «Сборка пакета (.ipk)») или скачайте готовый файл `openwrt-extended-backup_*.ipk`.
+2. Передайте его на роутер, например:
+   ```sh
+   scp dist/openwrt-extended-backup_*.ipk root@<ip_роутера>:/tmp/
+   ```
+3. Установите пакет:
+   ```sh
+   opkg install /tmp/openwrt-extended-backup_*.ipk
+   ```
+
+Скрипты устанавливаются в `/usr/sbin/` и становятся доступны по именам `openwrt_full_backup` и `user_installed_packages`. По умолчанию вместе с пакетом будет установлена зависимость `ksmbd-tools`; чтобы исключить её, соберите пакет с параметром `WITH_KSMBD=0`.
+
+### Ручная установка скриптов
 ```sh
 # Основной скрипт резервного копирования
 wget https://raw.githubusercontent.com/nagual2/openwrt-extended-backup/main/scripts/openwrt_full_backup -O /backup
@@ -35,7 +50,37 @@ wget https://raw.githubusercontent.com/nagual2/openwrt-extended-backup/main/scri
 chmod +x /usr/bin/user_installed_packages
 ```
 
-Скрипт `/backup` можно запускать напрямую — он хранится в постоянной памяти и остаётся доступным после перезагрузки.
+При ручной установке скрипт `/backup` можно запускать напрямую — он хранится в постоянной памяти и остаётся доступным после перезагрузки.
+
+## Сборка пакета (.ipk)
+
+### Через OpenWrt buildroot/SDK
+1. Подключите репозиторий как feed (например, добавьте строку `src-git extended_backup https://github.com/nagual2/openwrt-extended-backup.git` в `feeds.conf`) или скопируйте каталог `openwrt/` из этого репозитория в `package/openwrt-extended-backup` внутри сборочной среды.
+2. Если используете feeds, обновите и установите пакет:
+   ```sh
+   ./scripts/feeds update extended_backup
+   ./scripts/feeds install openwrt-extended-backup
+   ```
+   При ручном копировании каталога этот шаг можно пропустить.
+3. При необходимости отключите зависимость `ksmbd-tools` через `make menuconfig` (Utilities → openwrt-extended-backup).
+4. Соберите пакет:
+   ```sh
+   make package/openwrt-extended-backup/compile V=sc
+   ```
+
+Готовый `ipk` окажется в каталоге `bin/packages/<архитектура>/packages/`.
+
+### Локальная сборка без SDK
+
+В корне проекта доступен упрощённый `Makefile`:
+
+```sh
+make ipk              # соберёт dist/openwrt-extended-backup_<версия>-1_all.ipk
+make ipk WITH_KSMBD=0 # исключить зависимость на ksmbd-tools
+make install          # установит пакет через opkg, если утилита доступна на хосте
+```
+
+Достаточно стандартных утилит `tar` и `ar`. Готовые файлы появляются в каталоге `dist/`.
 
 ## Быстрый старт
 1. Подключитесь к роутеру по SSH и запустите `./backup` или `/backup`.
