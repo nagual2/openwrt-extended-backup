@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.7.0](https://github.com/nagual2/openwrt-extended-backup/compare/v0.6.0...v0.7.0) (2025-10-23)
+
+
+### Features
+
+* **user_installed_packages:** robust user package detection, commands, test, and docs ([5f13cbc](https://github.com/nagual2/openwrt-extended-backup/commit/5f13cbc0d62596da480ba2f7701fd519f15e021a))
+
 ## [0.6.0](https://github.com/nagual2/openwrt-extended-backup/compare/v0.5.0...v0.6.0) (2025-10-23)
 
 
