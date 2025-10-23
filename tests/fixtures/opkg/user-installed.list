@@ -1,0 +1,6 @@
+# user maintained list
+bash  
+luci-theme-material
+
+# comment line with package afterwards
+smartmontools # keep for diagnostics

@@ -15,7 +15,7 @@
 - Автоматическая проверка и установка требуемых пакетов (`tar`, `ksmbd` при необходимости).
 - Настройка временной SMB-шары (`ksmbd`) с произвольным паролем по умолчанию.
 - Альтернативная выгрузка архива через SCP/FTP, если SMB не требуется.
-- Генерация команд для переустановки вручную установленных пакетов (`user_installed_packages`).
+- Детерминированная генерация списка и команд для переустановки вручную установленных пакетов (`user_installed_packages`).
 
 ## Требования
 - Маршрутизатор под управлением OpenWrt ≥ 22.03 с BusyBox ≥ 1.35.0.
@@ -96,8 +96,13 @@ make install          # установит пакет через opkg, если 
 | --- | --- | --- |
 | `openwrt_full_backup` | `-V`, `--version` | Выводит текущую версию утилиты и завершает выполнение. |
 | `openwrt_full_backup` | без аргументов | Работает интерактивно и спрашивает только о необходимости установки `ksmbd`. |
+| `user_installed_packages` | `-h`, `--help` | Выводит краткую справку и перечисление доступных опций. |
 | `user_installed_packages` | `-V`, `--version` | Выводит текущую версию утилиты и завершает выполнение. |
-| `user_installed_packages` | без аргументов | Не принимает дополнительных аргументов и выводит команды `opkg install` для всех вручную установленных пакетов. |
+| `user_installed_packages` | `--status-file PATH` | Использует альтернативный `opkg` статус-файл (например, для тестов). |
+| `user_installed_packages` | `--user-installed-file PATH` | Добавляет пакеты из произвольного списка (по одному имени на строку). |
+| `user_installed_packages` | `-x`, `--exclude PATTERN` | Исключает пакеты по шаблону (аргумент можно повторять). |
+| `user_installed_packages` | `--include-auto-deps` | Включает зависимости, помеченные `Auto-Installed: yes`. |
+| `user_installed_packages` | без аргументов | Анализирует текущую систему и выводит отсортированные команды `opkg update` и `opkg install …`. |
 
 ## Версионирование и релизы
 - Текущая версия хранится в файле `VERSION` в корне репозитория.
@@ -131,7 +136,27 @@ scp root@192.168.1.1:/tmp/archive/fullbackup_OpenWrt_23.05.3_2024-10-15_22.11.ta
 user_installed_packages > /tmp/opkg-user-packages.sh
 scp root@192.168.1.1:/tmp/opkg-user-packages.sh ./
 ```
-Скрипт создаст последовательность команд `opkg install`, готовую к выполнению на новом устройстве.
+Скрипт анализирует `/usr/lib/opkg/status`, исключает базовые пакеты с минимальным временем установки прошивки и зависимости, помеченные `Auto-Installed: yes`, а при наличии дополняет результат данными из списка `user-installed`. На выходе получается детерминированный список и готовые команды для переустановки:
+
+```text
+# user-installed opkg packages (7)
+# main packages (6)
+bash
+htop
+luci-app-sqm
+luci-theme-material
+smartmontools
+tailscale
+
+# LuCI translations (1)
+luci-i18n-firewall-ru
+
+opkg update
+opkg install bash htop luci-app-sqm luci-theme-material smartmontools tailscale
+opkg install luci-i18n-firewall-ru
+```
+
+Можно, например, скрыть локализации (`user_installed_packages --exclude 'luci-i18n-*'`) или вернуть зависимости, помеченные `Auto-Installed: yes` (`user_installed_packages --include-auto-deps`).
 
 ## Меры безопасности
 - Используйте SMB-шару только в доверенной сети. После копирования архива остановите `ksmbd` и удалите созданного пользователя: `ksmbd.deluser RR`.
