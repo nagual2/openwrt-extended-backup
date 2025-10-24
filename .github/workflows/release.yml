@@ -16,14 +16,14 @@ jobs:
 
     steps:
       - id: release
-        uses: google-github-actions/release-please-action@v4
+        uses: google-github-actions/release-please-action@e4dc86ba9405554aeba3c6bb2d169500e7d3b4ee # v4
         with:
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
 
       - name: Checkout repository
         if: steps.release.outputs.release_created == 'true'
-        uses: actions/checkout@v4.1.7
+        uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332 # v4.1.7
         with:
           fetch-depth: 0
           ref: ${{ steps.release.outputs.tag_name }}
@@ -49,7 +49,7 @@ jobs:
 
       - name: Upload release assets
         if: steps.release.outputs.release_created == 'true'
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@6da8fa9354ddfdc4aeace5fc48d7f679b5214090 # v2
         with:
           tag_name: ${{ steps.release.outputs.tag_name }}
           files: |
