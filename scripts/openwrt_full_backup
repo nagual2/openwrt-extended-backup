@@ -1,4 +1,11 @@
 #!/bin/sh
+# shellcheck shell=sh
+
+set -eu
+
+if set -o pipefail 2>/dev/null; then
+    :
+fi
 
 PROGRAM=$(basename "$0")
 SCRIPT_PATH=$0
@@ -8,7 +15,7 @@ case "$SCRIPT_PATH" in
     SCRIPT_SOURCE=$(dirname "$SCRIPT_PATH")
     ;;
 *)
-    LOOKUP=$(command -v -- "$SCRIPT_PATH" 2>/dev/null)
+    LOOKUP=$(command -v -- "$SCRIPT_PATH" 2>/dev/null || printf '')
     if [ -n "$LOOKUP" ]; then
         SCRIPT_SOURCE=$(dirname "$LOOKUP")
     else
@@ -32,7 +39,7 @@ elif [ -r "$SHARE_VERSION_FILE" ]; then
     VERSION=$(head -n 1 "$SHARE_VERSION_FILE")
 fi
 
-if [ -z "$VERSION" ]; then
+if [ -z "${VERSION-}" ]; then
     VERSION=$VERSION_FALLBACK
 fi
 
@@ -40,156 +47,466 @@ show_version() {
     printf '%s version %s\n' "$PROGRAM" "$VERSION"
 }
 
-for arg in "$@"; do
-    case "$arg" in
-    -V | --version)
-        show_version
-        exit 0
-        ;;
-    esac
-done
+EX_OK=0
+EX_USAGE=64
+EX_UNAVAILABLE=69
+EX_SOFTWARE=70
 
-# OPENWRT_FULL_BACKUP
+LOG_LEVEL=1
+EXPORT_MODE='scp'
+EMIT_SCP_CMD=0
+SSH_HOST='OpenWrt'
+SSH_PORT='22'
+SSH_USER='root'
+OUT_DIR='/tmp'
+ARCHIVE_FILENAME=''
+ARCHIVE_PATH=''
+REMOVE_ARCHIVE_ON_FAILURE=0
 
-clear
-printf '(v%s)\n' "$VERSION"
-sleep 2
-clear
+KSMBD_SHARE_NAME='owrt_archive'
+KSMBD_USER='owrt_backup'
+KSMBD_PASSWORD=''
+KSMBD_SHARE_CREATED=0
+KSMBD_SHARE_EXISTED=0
 
-ksmbd_otkaz=0
+CLEANUP_DONE=0
 
-# Проверяем, установлен ли ksmbd
-if ! opkg list-installed | grep -q '^ksmbd-server'; then
-    printf 'Установить ksmbd для доступа к роутеру по сети? (\033[1;32mY\033[0m/\033[0mn): '
-    IFS= read -r answer
+timestamp() {
+    date '+%Y-%m-%d %H:%M:%S'
+}
 
-    # Обрабатываем ответ (по умолчанию Y)
-    case "${answer:-Y}" in
-    [Yy]*)
-        printf 'Устанавливаем ksmbd...\n'
-        opkg update
-        opkg install luci-i18n-ksmbd-ru ksmbd-avahi-service
+log_print() {
+    threshold=$1
+    level=$2
+    shift 2
+
+    if [ "$level" = 'ERROR' ] || [ "$LOG_LEVEL" -ge "$threshold" ]; then
+        if [ "$#" -gt 0 ]; then
+            printf '%s %s %s\n' "$(timestamp)" "$level" "$*" >&2
+        else
+            printf '%s %s\n' "$(timestamp)" "$level" >&2
+        fi
+    fi
+}
+
+log_info() {
+    log_print 1 'INFO' "$@"
+}
+
+log_debug() {
+    log_print 2 'DEBUG' "$@"
+}
+
+log_error() {
+    log_print 0 'ERROR' "$@"
+}
+
+fatal() {
+    message=$1
+    code=${2:-$EX_SOFTWARE}
+    log_error "$message"
+    exit "$code"
+}
+
+usage() {
+    cat <<'EOF'
+Использование: openwrt_full_backup [ОПЦИИ]
+
+Опции:
+      --export=MODE       Режим экспорта: scp (по умолчанию), smb или local
+      --emit-scp-cmd      Вывести готовую команду scp без дополнительного текста
+      --ssh-host HOST     Имя или адрес OpenWrt-хоста (по умолчанию OpenWrt)
+      --ssh-port PORT     Порт SSH (по умолчанию 22)
+      --ssh-user USER     Пользователь SSH (по умолчанию root)
+      --out-dir PATH      Каталог для архива (по умолчанию /tmp)
+  -q, --quiet             Режим тихого вывода (только ошибки)
+  -v                      Расширенный вывод (можно указать дважды)
+  -h, --help              Показать эту справку и выйти
+  -V, --version           Показать версию и выйти
+EOF
+}
+
+require_command() {
+    if ! command -v "$1" >/dev/null 2>&1; then
+        fatal "Требуемая утилита '$1' недоступна" "$EX_UNAVAILABLE"
+    fi
+}
+
+to_absolute_path() {
+    case "$1" in
+    /*)
+        printf '%s\n' "$1"
         ;;
     *)
-        printf 'Установка ksmbd отклонена.\n'
-        ksmbd_otkaz=1
-        sleep 2
+        printf '%s/%s\n' "$(pwd)" "$1"
         ;;
     esac
-fi
+}
 
-if ! opkg list-installed | grep -q '^tar'; then
-    printf 'Устанавливаем полную версию tar\n'
-    printf '================================\n\n'
-    opkg update
-    opkg install tar
-fi
+find_share_index_by_name() {
+    name=$1
+    share_indexes=$(uci -q show ksmbd | sed -n 's/^ksmbd\.@share\[\([0-9]\+\)\]=share$/\1/p')
+    for idx in $share_indexes; do
+        current=$(uci -q get "ksmbd.@share[$idx].name" 2>/dev/null || printf '')
+        if [ "$current" = "$name" ]; then
+            printf '%s\n' "$idx"
+            return 0
+        fi
+    done
+    return 1
+}
 
-# формируем скрипт очистки осиротевших пакетов
-CLEANUP_SCRIPT="/etc/opkg_cleanup_$(head /dev/urandom | tr -dc 'A-Za-z0-9' | head -c 8).sh"
+remove_smb_share() {
+    idx=$(find_share_index_by_name "$KSMBD_SHARE_NAME" 2>/dev/null || printf '')
+    if [ -n "$idx" ]; then
+        uci delete "ksmbd.@share[$idx]" >/dev/null 2>&1 || true
+        uci commit ksmbd >/dev/null 2>&1 || true
+        if [ -x /etc/init.d/ksmbd ]; then
+            /etc/init.d/ksmbd restart >/dev/null 2>&1 || true
+        fi
+    fi
+}
 
-cat <<'EOF' >"$CLEANUP_SCRIPT"
-#!/bin/sh
-# Удаляем старые следы (если скрипт прерывался ранее)
-sed -i '/^exit 0$/d;/^$/d' /etc/rc.local 2>/dev/null
+cleanup() {
+    status=$1
 
-# Основная очистка opkg
-grep "^Package: " /usr/lib/opkg/status | cut -d' ' -f2 | while read -r pkg; do
-    [ ! -f "/usr/lib/opkg/info/$pkg.list" ] &&
-        sed -i "/^Package: $pkg$/,/^$/d" /usr/lib/opkg/status
-done
-opkg update
+    if [ "$CLEANUP_DONE" -eq 1 ]; then
+        exit "$status"
+    fi
+    CLEANUP_DONE=1
 
-# Чистим себя из rc.local и возвращаем exit 0
-sed -i "\|$(basename "$0")|d" /etc/rc.local
-echo "exit 0" >> /etc/rc.local
-rm -f "$0"
-EOF
+    set +e
 
-chmod +x "$CLEANUP_SCRIPT"
-sed -i '/^exit 0$/d;/^$/d' /etc/rc.local 2>/dev/null
-{
-    echo "$CLEANUP_SCRIPT"
-    echo 'exit 0'
-} >>/etc/rc.local
-chmod +x /etc/rc.local
+    if [ "$status" -ne 0 ] && [ "$REMOVE_ARCHIVE_ON_FAILURE" -eq 1 ] && [ -n "$ARCHIVE_PATH" ]; then
+        rm -f "$ARCHIVE_PATH"
+    fi
 
-clear
-printf 'Создаём архив. Пожалуйста, подождите две минуты, процесс идёт...\n'
-printf '=================================================================\n'
-FIRMWARE_VERSION=$(grep 'DISTRIB_DESCRIPTION' /etc/openwrt_release | cut -d"'" -f2 | tr ' ' '_')
-SYS_ARCHIVE_FILENAME="fullbackup_${FIRMWARE_VERSION}_$(date +'%Y-%m-%d_%H.%M')"
-SHARE_NAME='owrt_archive'
-OUTPUT_DIRECTORY='/tmp/archive/'
+    if [ "$status" -ne 0 ] && [ "$EXPORT_MODE" = 'smb' ] && [ "$KSMBD_SHARE_CREATED" -eq 1 ] && [ "$KSMBD_SHARE_EXISTED" -eq 0 ]; then
+        remove_smb_share
+    fi
 
-# Цвета
-YELLOW='\033[1;33m'
-GREEN='\033[1;32m'
-NC='\033[0m'
+    exit "$status"
+}
 
-mkdir -p "$OUTPUT_DIRECTORY"
-chmod 777 "$OUTPUT_DIRECTORY"
+trap 'cleanup $?' EXIT
+trap 'cleanup 130' INT
+trap 'cleanup 143' TERM
 
-printf 'Сжимаем файлы\n'
-tar -czpf "${OUTPUT_DIRECTORY}${SYS_ARCHIVE_FILENAME}.tar.gz" \
-    --preserve-permissions \
-    --same-owner \
-    --exclude='/overlay/work' \
-    --exclude='/overlay/upper/run' \
-    --exclude='/overlay/upper/etc/os-release' \
-    --exclude='/overlay/upper/usr/lib/os-release' \
-    /overlay 2>/dev/null
-
-if [ "$ksmbd_otkaz" != '1' ]; then
-    # Создаём, или обновляем пользователя
-    KSMBD_USER='RR'
-    KSMBD_PASSWORD='12345'
-    ksmbd.adduser "$KSMBD_USER" -p "$KSMBD_PASSWORD" >/dev/null
-
-    # Ищем шару
-    UCI_SHARE_INDEX=''
-    share_indexes=$(uci show ksmbd 2>/dev/null | sed -n 's/^ksmbd\.@share\[\([0-9]\+\)\]=share$/\1/p')
-
-    if [ -n "$share_indexes" ]; then
-        for idx in $share_indexes; do
-            if uci get "ksmbd.@share[$idx].name" >/dev/null 2>&1; then
-                NAME=$(uci get "ksmbd.@share[$idx].name")
-                if [ "$NAME" = "$SHARE_NAME" ]; then
-                    UCI_SHARE_INDEX=$idx
-                    break
-                fi
+parse_args() {
+    while [ $# -gt 0 ]; do
+        case "$1" in
+        --export=*)
+            EXPORT_MODE=${1#--export=}
+            ;;
+        --export)
+            shift || fatal 'Опция --export требует аргумент' "$EX_USAGE"
+            EXPORT_MODE=$1
+            ;;
+        --emit-scp-cmd)
+            EMIT_SCP_CMD=1
+            ;;
+        --ssh-host=*)
+            SSH_HOST=${1#--ssh-host=}
+            ;;
+        --ssh-host)
+            shift || fatal 'Опция --ssh-host требует аргумент' "$EX_USAGE"
+            SSH_HOST=$1
+            ;;
+        --ssh-port=*)
+            SSH_PORT=${1#--ssh-port=}
+            ;;
+        --ssh-port)
+            shift || fatal 'Опция --ssh-port требует аргумент' "$EX_USAGE"
+            SSH_PORT=$1
+            ;;
+        --ssh-user=*)
+            SSH_USER=${1#--ssh-user=}
+            ;;
+        --ssh-user)
+            shift || fatal 'Опция --ssh-user требует аргумент' "$EX_USAGE"
+            SSH_USER=$1
+            ;;
+        --out-dir=*)
+            OUT_DIR=${1#--out-dir=}
+            ;;
+        --out-dir)
+            shift || fatal 'Опция --out-dir требует аргумент' "$EX_USAGE"
+            OUT_DIR=$1
+            ;;
+        -v)
+            if [ "$LOG_LEVEL" -lt 2 ]; then
+                LOG_LEVEL=$((LOG_LEVEL + 1))
             fi
-        done
+            ;;
+        -q | --quiet)
+            LOG_LEVEL=0
+            ;;
+        -h | --help)
+            usage
+            exit "$EX_OK"
+            ;;
+        -V | --version)
+            show_version
+            exit "$EX_OK"
+            ;;
+        --)
+            shift
+            break
+            ;;
+        -*)
+            fatal "Неизвестная опция: $1" "$EX_USAGE"
+            ;;
+        *)
+            fatal "Неожиданный аргумент: $1" "$EX_USAGE"
+            ;;
+        esac
+        shift
+    done
+
+    if [ $# -gt 0 ]; then
+        fatal "Неожиданный аргумент: $1" "$EX_USAGE"
     fi
 
-    if [ -z "$UCI_SHARE_INDEX" ]; then
-        printf 'Создаём сетевую папку\n'
-        uci add ksmbd share >/dev/null
-        uci set ksmbd.@share[-1].name="$SHARE_NAME"
-        uci set ksmbd.@share[-1].path="$OUTPUT_DIRECTORY"
-        uci set ksmbd.@share[-1].guest_ok='yes'
-        uci set ksmbd.@share[-1].read_only='no'
-        uci set ksmbd.@share[-1].create_mask='0777'
-        uci set ksmbd.@share[-1].dir_mask='0777'
-        uci set ksmbd.@share[-1].users="$KSMBD_USER"
-        uci commit ksmbd
+    case "$EXPORT_MODE" in
+    scp | smb | local)
+        ;;
+    *)
+        fatal "Неподдерживаемый режим экспорта: $EXPORT_MODE" "$EX_USAGE"
+        ;;
+    esac
+
+    case "$SSH_PORT" in
+    '' | *[!0-9]*)
+        fatal 'Порт SSH должен быть целым числом' "$EX_USAGE"
+        ;;
+    esac
+
+    OUT_DIR=$(to_absolute_path "$OUT_DIR")
+}
+
+sanitize_token() {
+    token=$1
+    printf '%s\n' "$token" | tr ' ' '_' | tr -c 'A-Za-z0-9_.-' '_'
+}
+
+get_firmware_tag() {
+    if [ -r /etc/openwrt_release ]; then
+        desc=$(grep "^DISTRIB_DESCRIPTION='" /etc/openwrt_release 2>/dev/null | head -n 1)
+        if [ -n "$desc" ]; then
+            value=$(printf '%s' "$desc" | cut -d"'" -f2)
+            if [ -n "$value" ]; then
+                sanitize_token "$value"
+                return 0
+            fi
+        fi
     fi
-fi
+    if command -v uname >/dev/null 2>&1; then
+        sanitize_token "$(uname -n)"
+        return 0
+    fi
+    printf 'OpenWrt\n'
+}
 
-# Вывод итогов
-if [ "$ksmbd_otkaz" != '1' ]; then
-    printf 'Извлекаем IP и hostname\n'
-    IP=$(ip -4 addr show br-lan | awk '/inet / {print $2}' | cut -d/ -f1)
-    HOST=$(uci get system.@system[0].hostname)
-    sleep 2
-    /etc/init.d/ksmbd restart
+prepare_environment() {
+    require_command tar
+    require_command date
 
-    printf '\n✅ %s\n\n' "${YELLOW}Готово! Архив доступен по адресам${NC}"
-    printf '%s\n' "${YELLOW}\\\\${IP}\\${SHARE_NAME}${NC}"
-    printf '%s\n' "${YELLOW}\\\\${HOST}\\${SHARE_NAME}${NC}"
-    printf '\nЕсли запросит пароль, ввести:\n'
-    printf 'Логин:  %s\n' "$KSMBD_USER"
-    printf 'Пароль: %s\n\n' "$KSMBD_PASSWORD"
-else
-    printf '\n%s\n\n' "${YELLOW}Архив сохранён в папке ${GREEN}/tmp/archive ${YELLOW}на роутере и недоступен через сетевые шары.${NC}"
-fi
+    if [ "$EXPORT_MODE" = 'scp' ]; then
+        log_debug 'Режим экспорта: SCP'
+    elif [ "$EXPORT_MODE" = 'smb' ]; then
+        log_debug 'Режим экспорта: SMB'
+    else
+        log_debug 'Режим экспорта: local'
+    fi
+
+    if ! mkdir -p "$OUT_DIR"; then
+        fatal "Не удалось создать каталог: $OUT_DIR" "$EX_SOFTWARE"
+    fi
+
+    if [ ! -w "$OUT_DIR" ]; then
+        fatal "Каталог недоступен для записи: $OUT_DIR" "$EX_SOFTWARE"
+    fi
+}
+
+create_archive() {
+    firmware=$(get_firmware_tag)
+    timestamp_label=$(date +'%Y-%m-%d_%H-%M-%S')
+    ARCHIVE_FILENAME="fullbackup_${firmware}_${timestamp_label}.tar.gz"
+    ARCHIVE_PATH="${OUT_DIR%/}/$ARCHIVE_FILENAME"
+
+    if [ -e "$ARCHIVE_PATH" ]; then
+        fatal "Файл уже существует: $ARCHIVE_PATH" "$EX_SOFTWARE"
+    fi
+
+    log_info "Создание архива: $ARCHIVE_PATH"
+    REMOVE_ARCHIVE_ON_FAILURE=1
+
+    if ! tar -czpf "$ARCHIVE_PATH" \
+        --preserve-permissions \
+        --same-owner \
+        --exclude='/overlay/work' \
+        --exclude='/overlay/upper/run' \
+        --exclude='/overlay/upper/etc/os-release' \
+        --exclude='/overlay/upper/usr/lib/os-release' \
+        /overlay; then
+        fatal 'Не удалось создать архив' "$EX_SOFTWARE"
+    fi
+
+    REMOVE_ARCHIVE_ON_FAILURE=0
+
+    log_info "Архив сохранён: $ARCHIVE_PATH"
+
+    if command -v du >/dev/null 2>&1; then
+        size=$(du -h "$ARCHIVE_PATH" 2>/dev/null | awk '{print $1}' | head -n 1)
+        if [ -n "$size" ]; then
+            log_info "Размер архива: $size"
+        fi
+    fi
+}
+
+ensure_ksmbd_dependencies() {
+    require_command ksmbd.adduser
+    require_command uci
+    if [ ! -x /etc/init.d/ksmbd ]; then
+        fatal 'Служба ksmbd недоступна (нет /etc/init.d/ksmbd)' "$EX_UNAVAILABLE"
+    fi
+
+    if command -v ksmbd.status >/dev/null 2>&1; then
+        log_debug 'Обнаружен ksmbd.status'
+    fi
+}
+
+generate_password() {
+    if command -v tr >/dev/null 2>&1; then
+        candidate=$(tr -dc 'A-Za-z0-9' </dev/urandom 2>/dev/null | head -c 16)
+        if [ -n "$candidate" ]; then
+            printf '%s\n' "$candidate"
+            return 0
+        fi
+    fi
+    printf 'owrt_%s\n' "$(date +'%H%M%S')"
+}
+
+setup_smb_export() {
+    ensure_ksmbd_dependencies
+
+    if [ -z "$KSMBD_PASSWORD" ]; then
+        KSMBD_PASSWORD=$(generate_password)
+    fi
+
+    log_info "Обновление пользователя SMB: $KSMBD_USER"
+    ksmbd.adduser "$KSMBD_USER" -p "$KSMBD_PASSWORD"
+
+    share_index=$(find_share_index_by_name "$KSMBD_SHARE_NAME" 2>/dev/null || printf '')
+    if [ -n "$share_index" ]; then
+        KSMBD_SHARE_EXISTED=1
+        target_index=$share_index
+        log_debug "Используется существующая шара @$share_index"
+    else
+        log_info "Создание SMB-шары: $KSMBD_SHARE_NAME"
+        if ! uci add ksmbd share >/dev/null 2>&1; then
+            fatal 'Не удалось создать раздел ksmbd share' "$EX_SOFTWARE"
+        fi
+        target_index='-1'
+        KSMBD_SHARE_EXISTED=0
+    fi
+
+    uci set ksmbd.@share[$target_index].name="$KSMBD_SHARE_NAME"
+    uci set ksmbd.@share[$target_index].path="$OUT_DIR"
+    uci set ksmbd.@share[$target_index].guest_ok='no'
+    uci set ksmbd.@share[$target_index].read_only='yes'
+    uci set ksmbd.@share[$target_index].create_mask='0644'
+    uci set ksmbd.@share[$target_index].dir_mask='0755'
+    uci set ksmbd.@share[$target_index].users="$KSMBD_USER"
+    uci commit ksmbd
+
+    KSMBD_SHARE_CREATED=1
+
+    if ! /etc/init.d/ksmbd restart >/dev/null 2>&1; then
+        fatal 'Не удалось перезапустить службу ksmbd' "$EX_SOFTWARE"
+    fi
+
+    host=$(get_hostname)
+    ip=$(get_primary_ip)
+
+    if [ -n "$ip" ]; then
+        log_info "SMB-шара доступна по адресу \\\\$ip\\\\$KSMBD_SHARE_NAME"
+    fi
+    log_info "SMB-шара доступна по имени \\\\$host\\\\$KSMBD_SHARE_NAME"
+    log_info "Имя пользователя: $KSMBD_USER"
+    log_info "Пароль: $KSMBD_PASSWORD"
+}
+
+get_hostname() {
+    if command -v uci >/dev/null 2>&1; then
+        host=$(uci -q get system.@system[0].hostname 2>/dev/null || printf '')
+        if [ -n "$host" ]; then
+            printf '%s\n' "$host"
+            return 0
+        fi
+    fi
+    if command -v hostname >/dev/null 2>&1; then
+        hostname 2>/dev/null
+        return 0
+    fi
+    printf '%s\n' "$SSH_HOST"
+}
+
+get_primary_ip() {
+    if ! command -v ip >/dev/null 2>&1; then
+        return 1
+    fi
+
+    if ip -4 addr show br-lan >/dev/null 2>&1; then
+        candidate=$(ip -4 addr show br-lan | awk '/inet / {print $2}' | cut -d/ -f1 | head -n 1)
+        if [ -n "$candidate" ]; then
+            printf '%s\n' "$candidate"
+            return 0
+        fi
+    fi
+
+    candidate=$(ip -4 addr show | awk '/inet / && $2 !~ /^127\./ {print $2}' | cut -d/ -f1 | head -n 1)
+    if [ -n "$candidate" ]; then
+        printf '%s\n' "$candidate"
+        return 0
+    fi
+    return 1
+}
+
+emit_scp_instruction() {
+    scp_opts=''
+    if [ "$SSH_PORT" != '22' ]; then
+        scp_opts="-P $SSH_PORT"
+    fi
+
+    command_text="scp"
+    if [ -n "$scp_opts" ]; then
+        command_text="$command_text $scp_opts"
+    fi
+    command_text="$command_text $SSH_USER@$SSH_HOST:$ARCHIVE_PATH <destination>"
+
+    log_info "Готовая команда SCP: $command_text"
+
+    if [ "$EMIT_SCP_CMD" -eq 1 ]; then
+        printf '%s\n' "$command_text"
+    fi
+}
+
+parse_args "$@"
+
+prepare_environment
+create_archive
+
+case "$EXPORT_MODE" in
+scp)
+    emit_scp_instruction
+    ;;
+smb)
+    setup_smb_export
+    ;;
+local)
+    log_info "Архив сохранён в $ARCHIVE_PATH"
+    ;;
+esac
+
+exit "$EX_OK"
