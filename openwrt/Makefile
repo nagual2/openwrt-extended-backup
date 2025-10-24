@@ -22,7 +22,7 @@ define Package/openwrt-extended-backup
 endef
 
 define Package/openwrt-extended-backup/description
-Toolkit that automates full backup creation of the overlay partition and lists user installed packages on OpenWrt.
+  Toolkit that automates full backup creation of the overlay partition, provides a safe restore helper, and lists user installed packages on OpenWrt.
 endef
 
 define Package/openwrt-extended-backup/config
@@ -49,6 +49,7 @@ endef
 define Package/openwrt-extended-backup/install
     $(INSTALL_DIR) $(1)/usr/sbin
     $(INSTALL_BIN) $(PKG_BUILD_DIR)/scripts/openwrt_full_backup $(1)/usr/sbin/openwrt_full_backup
+    $(INSTALL_BIN) $(PKG_BUILD_DIR)/scripts/openwrt_full_restore $(1)/usr/sbin/openwrt_full_restore
     $(INSTALL_BIN) $(PKG_BUILD_DIR)/scripts/user_installed_packages $(1)/usr/sbin/user_installed_packages
     $(INSTALL_DIR) $(1)/usr/share/openwrt-extended-backup
     $(INSTALL_DATA) $(PKG_BUILD_DIR)/VERSION $(1)/usr/share/openwrt-extended-backup/VERSION

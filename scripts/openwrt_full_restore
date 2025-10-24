@@ -1,0 +1,580 @@
+#!/bin/sh
+
+PROGRAM=$(basename "$0")
+SCRIPT_PATH=$0
+
+case "$SCRIPT_PATH" in
+*/*)
+    SCRIPT_SOURCE=$(dirname "$SCRIPT_PATH")
+    ;;
+*)
+    LOOKUP=$(command -v -- "$SCRIPT_PATH" 2>/dev/null)
+    if [ -n "$LOOKUP" ]; then
+        SCRIPT_SOURCE=$(dirname "$LOOKUP")
+    else
+        SCRIPT_SOURCE='.'
+    fi
+    ;;
+esac
+
+if ! SCRIPT_DIR=$(cd "$SCRIPT_SOURCE" 2>/dev/null && pwd); then
+    printf '%s: unable to determine script directory\n' "$PROGRAM" >&2
+    exit 1
+fi
+PROJECT_ROOT=$(dirname "$SCRIPT_DIR")
+VERSION_FILE="${PROJECT_ROOT}/VERSION"
+SHARE_VERSION_FILE='/usr/share/openwrt-extended-backup/VERSION'
+VERSION_FALLBACK='0.4.1'
+
+if [ -r "$VERSION_FILE" ]; then
+    VERSION=$(head -n 1 "$VERSION_FILE")
+elif [ -r "$SHARE_VERSION_FILE" ]; then
+    VERSION=$(head -n 1 "$SHARE_VERSION_FILE")
+fi
+
+if [ -z "$VERSION" ]; then
+    VERSION=$VERSION_FALLBACK
+fi
+
+show_version() {
+    printf '%s version %s\n' "$PROGRAM" "$VERSION"
+}
+
+show_help() {
+    cat <<'EOF'
+Использование: openwrt_full_restore [ОПЦИИ] [АРХИВ]
+
+Опции:
+  -a, --archive PATH     путь к архиву резервной копии (.tar.gz)
+  -d, --dry-run          только проверка и отчёт без изменений в системе
+  -p, --packages PATH    выполнить скрипт переустановки пакетов после восстановления
+      --no-packages      пропустить шаг с переустановкой пакетов
+  -y, --yes              не задавать вопросы, действовать по умолчанию
+  -h, --help             показать эту справку и выйти
+  -V, --version          показать версию и выйти
+
+Без указания архива скрипт запросит путь интерактивно. Для безопасной
+перезаписи текущие файлы сохраняются в каталоге /tmp/openwrt-restore-backup-<дата>.
+EOF
+}
+
+DRY_RUN=0
+AUTO_YES=0
+ARCHIVE_PATH=''
+PACKAGES_PATH=''
+SKIP_PACKAGES=0
+
+LIST_FILE=''
+OVERWRITE_FILE_LIST=''
+BACKUP_DIR=''
+BACKUP_LOG=''
+BACKUP_COUNT=0
+BACKUP_ERRORS=0
+SERVICES_TO_RESTART=''
+SERVICE_RESULTS=''
+PACKAGES_RESULT='skipped'
+PACKAGES_NOTE=''
+
+cleanup() {
+    if [ -n "$LIST_FILE" ] && [ -f "$LIST_FILE" ]; then
+        rm -f "$LIST_FILE"
+    fi
+    if [ -n "$OVERWRITE_FILE_LIST" ] && [ -f "$OVERWRITE_FILE_LIST" ]; then
+        rm -f "$OVERWRITE_FILE_LIST"
+    fi
+}
+
+trap cleanup EXIT INT TERM
+
+require_command() {
+    if ! command -v "$1" >/dev/null 2>&1; then
+        printf '%s: требуемая утилита "%s" недоступна\n' "$PROGRAM" "$1" >&2
+        exit 1
+    fi
+}
+
+resolve_path() {
+    case "$1" in
+    /*)
+        printf '%s\n' "$1"
+        ;;
+    *)
+        case "$1" in
+        *'/'*)
+            DIR_PART=$(dirname "$1")
+            BASENAME=$(basename "$1")
+            if DIR_REAL=$(cd "$DIR_PART" 2>/dev/null && pwd); then
+                printf '%s/%s\n' "$DIR_REAL" "$BASENAME"
+            else
+                printf '%s/%s\n' "$(pwd)" "$1"
+            fi
+            ;;
+        *)
+            printf '%s/%s\n' "$(pwd)" "$1"
+            ;;
+        esac
+        ;;
+    esac
+}
+
+add_service() {
+    service=$1
+    case " $SERVICES_TO_RESTART " in
+    *" $service "*)
+        ;;
+    *)
+        SERVICES_TO_RESTART="$SERVICES_TO_RESTART $service"
+        ;;
+    esac
+}
+
+confirm_action() {
+    if [ "$AUTO_YES" -eq 1 ]; then
+        return 0
+    fi
+    printf 'Продолжить восстановление? (\033[1;32my\033[0m/\033[0mn): '
+    IFS= read -r answer
+    case ${answer:-y} in
+    [Yy]*)
+        return 0
+        ;;
+    esac
+    printf 'Операция отменена пользователем.\n'
+    return 1
+}
+
+ensure_backup_dir() {
+    if [ -n "$BACKUP_DIR" ]; then
+        return 0
+    fi
+    TS=$(date +'%Y%m%d-%H%M%S')
+    BACKUP_DIR="/tmp/openwrt-restore-backup-$TS"
+    if ! mkdir -p "$BACKUP_DIR"; then
+        printf '%s: не удалось создать каталог резервных копий %s\n' "$PROGRAM" "$BACKUP_DIR" >&2
+        exit 1
+    fi
+    BACKUP_LOG="$BACKUP_DIR/index.txt"
+    printf '# файлы, перезаписанные openwrt_full_restore\n' >"$BACKUP_LOG"
+    printf '# дата: %s\n\n' "$(date)" >>"$BACKUP_LOG"
+}
+
+maybe_run_packages() {
+    if [ "$SKIP_PACKAGES" -eq 1 ]; then
+        PACKAGES_RESULT='skipped'
+        return
+    fi
+
+    path=$PACKAGES_PATH
+
+    if [ -z "$path" ]; then
+        if [ "$AUTO_YES" -eq 1 ]; then
+            PACKAGES_RESULT='skipped'
+            return
+        fi
+        printf '\nВыполнить сохранённый список пакетов (например, /tmp/opkg-user-packages.sh)? (\033[1;32my\033[0m/\033[0mn): '
+        IFS= read -r answer
+        case ${answer:-n} in
+        [Yy]*)
+            printf 'Укажите путь к скрипту со списком пакетов: '
+            IFS= read -r path
+            ;;
+        *)
+            PACKAGES_RESULT='skipped'
+            return
+            ;;
+        esac
+    fi
+
+    if [ -z "$path" ]; then
+        PACKAGES_RESULT='skipped'
+        return
+    fi
+
+    path_abs=$(resolve_path "$path")
+    if [ ! -r "$path_abs" ]; then
+        printf '⚠️  Не удалось прочитать файл пакетов: %s\n' "$path_abs" >&2
+        PACKAGES_RESULT='error'
+        PACKAGES_NOTE="$path_abs"
+        return
+    fi
+
+    printf '\nВыполняем переустановку пакетов из %s...\n' "$path_abs"
+    if sh "$path_abs"; then
+        PACKAGES_RESULT='executed'
+        PACKAGES_NOTE="$path_abs"
+    else
+        PACKAGES_RESULT='failed'
+        PACKAGES_NOTE="$path_abs"
+        printf '⚠️  Скрипт пакетов завершился с ошибкой.\n' >&2
+    fi
+}
+
+restart_services() {
+    SERVICES_TO_RESTART=$(printf '%s\n' "$SERVICES_TO_RESTART" | sed 's/^ //')
+    [ -z "$SERVICES_TO_RESTART" ] && return
+
+    printf '\nПерезапуск служб...\n'
+
+    for service in $SERVICES_TO_RESTART; do
+        case "$service" in
+        wifi)
+            if command -v wifi >/dev/null 2>&1; then
+                if wifi reload >/dev/null 2>&1; then
+                    printf '  [ok] wifi reload\n'
+                    SERVICE_RESULTS="$SERVICE_RESULTS\nwifi reload: ok"
+                else
+                    printf '  [!!] wifi reload завершилась с ошибкой\n' >&2
+                    SERVICE_RESULTS="$SERVICE_RESULTS\nwifi reload: failed"
+                fi
+            else
+                printf '  [skip] wifi: скрипт не найден\n'
+                SERVICE_RESULTS="$SERVICE_RESULTS\nwifi reload: skipped (скрипт не найден)"
+            fi
+            ;;
+        dnsmasq)
+            if [ -x /etc/init.d/dnsmasq ]; then
+                if /etc/init.d/dnsmasq restart >/dev/null 2>&1; then
+                    printf '  [ok] dnsmasq restart\n'
+                    SERVICE_RESULTS="$SERVICE_RESULTS\ndnsmasq restart: ok"
+                else
+                    printf '  [!!] dnsmasq restart завершилась с ошибкой\n' >&2
+                    SERVICE_RESULTS="$SERVICE_RESULTS\ndnsmasq restart: failed"
+                fi
+            else
+                printf '  [skip] dnsmasq: нет /etc/init.d/dnsmasq\n'
+                SERVICE_RESULTS="$SERVICE_RESULTS\ndnsmasq restart: skipped (нет /etc/init.d/dnsmasq)"
+            fi
+            ;;
+        sqm)
+            if [ -x /etc/init.d/sqm ]; then
+                if /etc/init.d/sqm restart >/dev/null 2>&1; then
+                    printf '  [ok] sqm restart\n'
+                    SERVICE_RESULTS="$SERVICE_RESULTS\nsqm restart: ok"
+                else
+                    printf '  [!!] sqm restart завершилась с ошибкой\n' >&2
+                    SERVICE_RESULTS="$SERVICE_RESULTS\nsqm restart: failed"
+                fi
+            else
+                printf '  [skip] sqm: нет /etc/init.d/sqm\n'
+                SERVICE_RESULTS="$SERVICE_RESULTS\nsqm restart: skipped (нет /etc/init.d/sqm)"
+            fi
+            ;;
+        *)
+            if [ -x "/etc/init.d/$service" ]; then
+                action='reload'
+                case "$service" in
+                dropbear)
+                    action='restart'
+                    ;;
+                esac
+                if "/etc/init.d/$service" "$action" >/dev/null 2>&1; then
+                    printf '  [ok] %s %s\n' "$service" "$action"
+                    SERVICE_RESULTS="$SERVICE_RESULTS\n$service $action: ok"
+                else
+                    printf '  [!!] %s %s завершилась с ошибкой\n' "$service" "$action" >&2
+                    SERVICE_RESULTS="$SERVICE_RESULTS\n$service $action: failed"
+                fi
+            else
+                printf '  [skip] %s: нет /etc/init.d/%s\n' "$service" "$service"
+                SERVICE_RESULTS="$SERVICE_RESULTS\n$service: skipped (нет /etc/init.d/$service)"
+            fi
+            ;;
+        esac
+    done
+}
+
+YELLOW='\033[1;33m'
+GREEN='\033[1;32m'
+CYAN='\033[1;36m'
+NC='\033[0m'
+
+# Опции CLI
+while [ $# -gt 0 ]; do
+    case "$1" in
+    -V|--version)
+        show_version
+        exit 0
+        ;;
+    -h|--help)
+        show_help
+        exit 0
+        ;;
+    -d|--dry-run)
+        DRY_RUN=1
+        ;;
+    -y|--yes)
+        AUTO_YES=1
+        ;;
+    -a|--archive)
+        opt=$1
+        shift
+        if [ $# -eq 0 ]; then
+            printf '%s: опция %s требует путь к архиву\n' "$PROGRAM" "$opt" >&2
+            exit 1
+        fi
+        ARCHIVE_PATH=$1
+        ;;
+    -p|--packages)
+        opt=$1
+        shift
+        if [ $# -eq 0 ]; then
+            printf '%s: опция %s требует путь к файлу\n' "$PROGRAM" "$opt" >&2
+            exit 1
+        fi
+        PACKAGES_PATH=$1
+        ;;
+    --no-packages)
+        SKIP_PACKAGES=1
+        ;;
+    --)
+        shift
+        break
+        ;;
+    -*)
+        printf '%s: неизвестная опция %s\n' "$PROGRAM" "$1" >&2
+        exit 1
+        ;;
+    *)
+        if [ -z "$ARCHIVE_PATH" ]; then
+            ARCHIVE_PATH=$1
+        else
+            printf '%s: лишний аргумент %s\n' "$PROGRAM" "$1" >&2
+            exit 1
+        fi
+        ;;
+    esac
+    shift
+done
+
+if [ $# -gt 0 ]; then
+    if [ -z "$ARCHIVE_PATH" ]; then
+        ARCHIVE_PATH=$1
+        shift
+    else
+        printf '%s: лишний аргумент %s\n' "$PROGRAM" "$1" >&2
+        exit 1
+    fi
+fi
+
+if [ $# -gt 0 ]; then
+    printf '%s: лишние аргументы после пути к архиву\n' "$PROGRAM" >&2
+    exit 1
+fi
+
+if [ -z "$ARCHIVE_PATH" ]; then
+    printf 'Укажите путь к архиву резервной копии: '
+    IFS= read -r ARCHIVE_PATH
+fi
+
+if [ -z "$ARCHIVE_PATH" ]; then
+    printf '%s: архив не задан\n' "$PROGRAM" >&2
+    exit 1
+fi
+
+require_command tar
+require_command mkdir
+require_command cp
+
+if [ "$(id -u)" -ne 0 ]; then
+    printf '%s: требуется запуск от root\n' "$PROGRAM" >&2
+    exit 1
+fi
+
+ARCHIVE_ABS=$(resolve_path "$ARCHIVE_PATH")
+if [ ! -r "$ARCHIVE_ABS" ]; then
+    printf '%s: архив %s недоступен для чтения\n' "$PROGRAM" "$ARCHIVE_ABS" >&2
+    exit 1
+fi
+
+LIST_FILE=$(mktemp)
+OVERWRITE_FILE_LIST=$(mktemp)
+TOTAL_ITEMS=0
+TOTAL_DIRS=0
+TOTAL_FILES=0
+NEW_FILES=0
+NEW_DIRS=0
+OVERWRITE_FILES=0
+OVERWRITE_DIRS=0
+
+printf '%sПроверяем архив...%s\n' "$CYAN" "$NC"
+if ! tar -tzf "$ARCHIVE_ABS" >"$LIST_FILE"; then
+    printf '%s: tar не смог прочитать архив (повреждённый файл?)\n' "$PROGRAM" >&2
+    exit 1
+fi
+
+printf '  Архив успешно прочитан, элементов: '
+TOTAL_ITEMS=$(wc -l <"$LIST_FILE")
+printf '%s\n' "$TOTAL_ITEMS"
+
+while IFS= read -r entry || [ -n "$entry" ]; do
+    [ -z "$entry" ] && continue
+    case "$entry" in
+    ./*)
+        entry=${entry#./}
+        ;;
+    esac
+    entry=${entry#*/./}
+    entry=${entry#/}
+    [ -z "$entry" ] && continue
+    if [ "${entry%/}" != "$entry" ]; then
+        clean=${entry%/}
+        TOTAL_DIRS=$((TOTAL_DIRS + 1))
+        target="/$clean"
+        if [ -d "$target" ]; then
+            OVERWRITE_DIRS=$((OVERWRITE_DIRS + 1))
+        else
+            NEW_DIRS=$((NEW_DIRS + 1))
+        fi
+        continue
+    fi
+
+    TOTAL_FILES=$((TOTAL_FILES + 1))
+    target="/$entry"
+    if [ -e "$target" ] || [ -L "$target" ]; then
+        OVERWRITE_FILES=$((OVERWRITE_FILES + 1))
+        printf '%s\n' "$entry" >>"$OVERWRITE_FILE_LIST"
+    else
+        NEW_FILES=$((NEW_FILES + 1))
+    fi
+
+    case "$entry" in
+    overlay/upper/*)
+        effective=${entry#overlay/upper/}
+        case "$effective" in
+        etc/config/network|etc/config/wireless)
+            add_service network
+            add_service wifi
+            ;;
+        etc/config/firewall)
+            add_service firewall
+            ;;
+        etc/config/dhcp)
+            add_service dnsmasq
+            ;;
+        etc/config/uhttpd)
+            add_service uhttpd
+            ;;
+        etc/config/dropbear)
+            add_service dropbear
+            ;;
+        etc/config/sqm)
+            add_service sqm
+            ;;
+        esac
+        ;;
+    esac
+
+done <"$LIST_FILE"
+
+printf '\n%sПредварительный отчёт%s\n' "$YELLOW" "$NC"
+printf '  Файлов в архиве:        %d\n' "$TOTAL_FILES"
+printf '  Каталогов в архиве:     %d\n' "$TOTAL_DIRS"
+printf '  Будет создано новых:    файлов %d, каталогов %d\n' "$NEW_FILES" "$NEW_DIRS"
+printf '  Требуют перезаписи:     файлов %d, каталогов %d\n' "$OVERWRITE_FILES" "$OVERWRITE_DIRS"
+
+SERVICES_TO_RESTART=$(printf '%s\n' "$SERVICES_TO_RESTART" | sed 's/^ //')
+if [ -n "$SERVICES_TO_RESTART" ]; then
+    printf '  Затронуты службы:       %s\n' "$SERVICES_TO_RESTART"
+else
+    printf '  Затронутые службы:      нет\n'
+fi
+
+if [ "$DRY_RUN" -eq 1 ]; then
+    printf '\nРежим dry-run: изменения не вносились.\n'
+    exit 0
+fi
+
+if ! confirm_action; then
+    exit 0
+fi
+
+if [ -s "$OVERWRITE_FILE_LIST" ]; then
+    printf '\nСоздаём резервные копии перезаписываемых файлов...\n'
+    while IFS= read -r rel || [ -n "$rel" ]; do
+        [ -z "$rel" ] && continue
+        target="/$rel"
+        if [ -e "$target" ] || [ -L "$target" ]; then
+            ensure_backup_dir
+            dest="$BACKUP_DIR/$rel"
+            if ! mkdir -p "$(dirname "$dest")"; then
+                printf '⚠️  Не удалось создать каталог для %s\n' "$dest" >&2
+                BACKUP_ERRORS=$((BACKUP_ERRORS + 1))
+                continue
+            fi
+            if cp -a "$target" "$dest"; then
+                BACKUP_COUNT=$((BACKUP_COUNT + 1))
+                printf '/%s\n' "$rel" >>"$BACKUP_LOG"
+            else
+                printf '⚠️  Ошибка копирования %s -> %s\n' "$target" "$dest" >&2
+                BACKUP_ERRORS=$((BACKUP_ERRORS + 1))
+            fi
+        fi
+    done <"$OVERWRITE_FILE_LIST"
+
+    if [ "$BACKUP_COUNT" -gt 0 ]; then
+        printf '  Резервные копии сохранены в %s\n' "$BACKUP_DIR"
+        if [ "$BACKUP_ERRORS" -gt 0 ]; then
+            printf '  ⚠️  Ошибок резервного копирования: %d\n' "$BACKUP_ERRORS" >&2
+        fi
+    else
+        printf '  Перезаписываемых файлов не найдено.\n'
+    fi
+else
+    printf '\nПерезаписываемых файлов нет — резервная копия не требуется.\n'
+fi
+
+printf '\nРаспаковываем архив...\n'
+if tar -xzp -f "$ARCHIVE_ABS" -C / --same-owner; then
+    printf '  Готово.\n'
+else
+    printf '⚠️  Ошибка при распаковке архива.\n' >&2
+    printf '  Проверьте резервные копии в %s\n' "$BACKUP_DIR" >&2
+    exit 1
+fi
+
+sync
+
+maybe_run_packages
+
+restart_services
+
+printf '\n%sИтоговый отчёт%s\n' "$GREEN" "$NC"
+printf '  Архив:                   %s\n' "$ARCHIVE_ABS"
+printf '  Всего файлов:           %d (каталогов %d)\n' "$TOTAL_FILES" "$TOTAL_DIRS"
+printf '  Перезаписано файлов:    %d\n' "$OVERWRITE_FILES"
+printf '  Создано новых файлов:   %d\n' "$NEW_FILES"
+if [ -n "$BACKUP_DIR" ] && [ "$BACKUP_COUNT" -gt 0 ]; then
+    printf '  Резервный каталог:      %s (файлов %d, ошибок %d)\n' "$BACKUP_DIR" "$BACKUP_COUNT" "$BACKUP_ERRORS"
+else
+    printf '  Резервный каталог:      не требовался\n'
+fi
+
+case "$PACKAGES_RESULT" in
+executed)
+    printf '  Пакеты:                 выполнен скрипт %s\n' "$PACKAGES_NOTE"
+    ;;
+failed)
+    printf '  Пакеты:                 скрипт %s завершился ошибкой\n' "$PACKAGES_NOTE"
+    ;;
+error)
+    printf '  Пакеты:                 не удалось запустить (%s)\n' "$PACKAGES_NOTE"
+    ;;
+skipped)
+    printf '  Пакеты:                 пропущено\n'
+    ;;
+*)
+    printf '  Пакеты:                 %s\n' "$PACKAGES_RESULT"
+    ;;
+esac
+
+if [ -n "$SERVICE_RESULTS" ]; then
+    printf '  Службы:                 \n'
+    printf '%s' "$SERVICE_RESULTS" | sed '1d' | while IFS= read -r line; do
+        [ -z "$line" ] && continue
+        printf '    - %s\n' "$line"
+    done
+else
+    printf '  Службы:                 перезапуск не требовался\n'
+fi
+
+printf '\nГотово. Проверьте работоспособность системы и при необходимости удалите архив и резервные копии.\n'
