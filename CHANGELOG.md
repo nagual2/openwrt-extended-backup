@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.8.2](https://github.com/nagual2/openwrt-extended-backup/compare/v0.8.1...v0.8.2) (2025-10-24)
+
+
+### Bug Fixes
+
+* **ci:** restore and stabilize shell script CI workflows ([1f327a0](https://github.com/nagual2/openwrt-extended-backup/commit/1f327a0f819f1f07d8a8e01e43b532b3f4dfe5ad))
+
 ## [0.8.1](https://github.com/nagual2/openwrt-extended-backup/compare/v0.8.0...v0.8.1) (2025-10-24)
 
 
