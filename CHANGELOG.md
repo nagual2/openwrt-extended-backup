@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.8.0](https://github.com/nagual2/openwrt-extended-backup/compare/v0.7.0...v0.8.0) (2025-10-24)
+
+
+### Features
+
+* **backup:** default to SCP export, new CLI flags, and robust SMB handling ([21653d8](https://github.com/nagual2/openwrt-extended-backup/commit/21653d8db8f413590fc3548096eb777a27f7e360))
+
 ## [0.7.0](https://github.com/nagual2/openwrt-extended-backup/compare/v0.6.0...v0.7.0) (2025-10-23)
 
 
