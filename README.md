@@ -1,6 +1,8 @@
 # openwrt_full_backup & openwrt_full_restore
 
 [![Shell quality checks](https://github.com/nagual2/openwrt-extended-backup/actions/workflows/shell-quality.yml/badge.svg)](https://github.com/nagual2/openwrt-extended-backup/actions/workflows/shell-quality.yml)
+[![Release automation](https://github.com/nagual2/openwrt-extended-backup/actions/workflows/release.yml/badge.svg)](https://github.com/nagual2/openwrt-extended-backup/actions/workflows/release.yml)
+[![Latest release](https://img.shields.io/github/v/release/nagual2/openwrt-extended-backup?sort=semver)](https://github.com/nagual2/openwrt-extended-backup/releases/latest)
 
 Набор shell-утилит, выполняющихся напрямую на маршрутизаторе под управлением OpenWrt. Основной сценарий `openwrt_full_backup` создаёт полную резервную копию пользовательского слоя (`/overlay`), сохраняет архив в выбранный каталог (по умолчанию `/tmp`) и выводит готовую команду `scp` для копирования. При необходимости скрипт умеет поднять временную SMB-шару через `ksmbd`. Комплементарная утилита `openwrt_full_restore` валидирует архив, безопасно восстанавливает файлы с предварительным резервным копированием текущего состояния, поддерживает dry-run и переустановку пакетов. Вспомогательный скрипт `user_installed_packages` выводит список вручную установленных пакетов для последующей переустановки.
 

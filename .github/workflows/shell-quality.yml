@@ -4,26 +4,62 @@ on:
   push:
   pull_request:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref == 'refs/heads/main' && 'main' || github.run_id }}
+  cancel-in-progress: ${{ github.ref == 'refs/heads/main' }}
+
 jobs:
   shell-quality:
     name: Shell quality
     runs-on: ubuntu-latest
+    env:
+      SHELLCHECK_VERSION: v0.10.0
+      SHFMT_VERSION: v3.9.0
+      JQ_VERSION: jq-1.7.1
+      TOOL_CACHE_VERSION: shellcheck-v0.10.0_shfmt-v3.9.0_jq-1.7.1
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332
 
-      - name: Install shell tooling
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y shellcheck shfmt jq
+      - name: Restore shell tooling cache
+        id: shell-tools-cache
+        uses: actions/cache@0400d5f644dc74513175e3cd8d07132dd4860809
+        with:
+          path: ~/.cache/openwrt-shell-tools
+          key: ${{ runner.os }}-shell-tools-${{ env.TOOL_CACHE_VERSION }}
+          restore-keys: |
+            ${{ runner.os }}-shell-tools-
+
+      - name: Bootstrap shell tooling
+        run: scripts/ci/install-shell-tools.sh
 
       - name: Run shell quality checks
         run: scripts/ci/check-shell-quality.sh
 
-      - name: Upload reports
+      - name: Upload ShellCheck reports
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: shellcheck-report
+          path: |
+            reports/shellcheck.*
+            reports/unquoted-variables.txt
+            reports/unsafe-eval.txt
+            reports/shebang-violations.txt
+          if-no-files-found: warn
+
+      - name: Upload shfmt report
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: shfmt-report
+          path: reports/shfmt.patch
+          if-no-files-found: ignore
+
+      - name: Upload shell quality bundle
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: shell-quality-reports
           path: reports/
