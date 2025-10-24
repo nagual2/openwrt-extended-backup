@@ -1,0 +1,203 @@
+[1mdiff --git a/scripts/user_installed_packages b/scripts/user_installed_packages[m
+[1mindex e8c1ca1..dffea0e 100755[m
+[1m--- a/scripts/user_installed_packages[m
+[1m+++ b/scripts/user_installed_packages[m
+[36m@@ -3,10 +3,6 @@[m
+ [m
+ set -eu[m
+ [m
+[31m-if set -o pipefail 2>/dev/null; then[m
+[31m-    :[m
+[31m-fi[m
+[31m-[m
+ PROGRAM=$(basename "$0")[m
+ SCRIPT_PATH=$0[m
+ [m
+[36m@@ -15,7 +11,7 @@[m [mcase "$SCRIPT_PATH" in[m
+     SCRIPT_SOURCE=$(dirname "$SCRIPT_PATH")[m
+     ;;[m
+ *)[m
+[31m-    LOOKUP=$(command -v -- "$SCRIPT_PATH" 2>/dev/null)[m
+[32m+[m[32m    LOOKUP=$(command -v -- "$SCRIPT_PATH" 2>/dev/null || printf '')[m
+     if [ -n "$LOOKUP" ]; then[m
+         SCRIPT_SOURCE=$(dirname "$LOOKUP")[m
+     else[m
+[36m@@ -44,92 +40,322 @@[m [mif [ -z "$VERSION" ]; then[m
+     VERSION=$VERSION_FALLBACK[m
+ fi[m
+ [m
+[32m+[m[32mEX_OK=0[m
+[32m+[m[32mEX_USAGE=64[m
+[32m+[m[32mEX_UNAVAILABLE=69[m
+[32m+[m[32mEX_SOFTWARE=70[m
+[32m+[m
+[32m+[m[32mDEFAULT_STATUS_FILE='/usr/lib/opkg/status'[m
+[32m+[m[32mSTATUS_FILE=$DEFAULT_STATUS_FILE[m
+[32m+[m[32mUSER_INSTALLED_FILE=''[m
+[32m+[m[32mINCLUDE_AUTO_DEPS=0[m
+[32m+[m[32mEXCLUDE_PATTERNS=''[m
+[32m+[m
+ show_version() {[m
+     printf '%s version %s\n' "$PROGRAM" "$VERSION"[m
+ }[m
+ [m
+[31m-timestamp() {[m
+[31m-    date '+%Y-%m-%d %H:%M:%S'[m
+[32m+[m[32musage() {[m
+[32m+[m[32m    cat <<EOF[m
+[32m+[m[32mИспользование: $PROGRAM [ОПЦИИ][m
+[32m+[m
+[32m+[m[32mОпции:[m
+[32m+[m[32m      --status-file PATH         Использовать альтернативный status-файл opkg (по умолчанию $DEFAULT_STATUS_FILE)[m
+[32m+[m[32m      --user-installed-file PATH Добавить пакеты из произвольного списка (по одному имени на строку)[m
+[32m+[m[32m  -x, --exclude PATTERN          Исключить пакеты по шаблону (опцию можно указать несколько раз)[m
+[32m+[m[32m      --include-auto-deps        Включить зависимости с Auto-Installed: yes[m
+[32m+[m[32m  -h, --help                     Показать эту справку и выйти[m
+[32m+[m[32m  -V, --version                  Показать версию и выйти[m
+[32m+[m[32mEOF[m
+[32m+[m[32m}[m
+[32m+[m
+[32m+[m[32mfatal() {[m
+[32m+[m[32m    message=$1[m
+[32m+[m[32m    code=${2:-$EX_SOFTWARE}[m
+[32m+[m[32m    printf '%s: %s\n' "$PROGRAM" "$message" >&2[m
+[32m+[m[32m    exit "$code"[m
+ }[m
+ [m
+[31m-log_info() {[m
+[31m-    if [ "$#" -gt 0 ]; then[m
+[31m-        printf '%s INFO %s\n' "$(timestamp)" "$*" >&2[m
+[32m+[m[32mappend_exclude_pattern() {[m
+[32m+[m[32m    pattern=$1[m
+[32m+[m[32m    if [ -z "$pattern" ]; then[m
+[32m+[m[32m        return[m
+[32m+[m[32m    fi[m
+[32m+[m
+[32m+[m[32m    if [ -z "$EXCLUDE_PATTERNS" ]; then[m
+[32m+[m[32m        EXCLUDE_PATTERNS=$pattern[m
+     else[m
+[31m-        printf '%s INFO\n' "$(timestamp)" >&2[m
+[32m+[m[32m        EXCLUDE_PATTERNS=$(printf '%s\n%s' "$EXCLUDE_PATTERNS" "$pattern")[m
+     fi[m
+ }[m
+ [m
+[31m-for arg in "$@"; do[m
+[31m-    case "$arg" in[m
+[31m-    -V | --version)[m
+[31m-        show_version[m
+[31m-        exit 0[m
+[31m-        ;;[m
+[31m-    esac[m
+[31m-done[m
+[32m+[m[32mshould_exclude() {[m
+[32m+[m[32m    pkg=$1[m
+[32m+[m[32m    if [ -z "$EXCLUDE_PATTERNS" ]; then[m
+[32m+[m[32m        return 1[m
+[32m+[m[32m    fi[m
+ [m
+[31m-log_info 'Генерируем список вручную установленных пакетов opkg'[m
+[32m+[m[32m    old_ifs=$IFS[m
+[32m+[m[32m    IFS='[m
+[32m+[m[32m'[m
+[32m+[m[32m    for pattern in $EXCLUDE_PATTERNS; do[m
+[32m+[m[32m        if [ -z "$pattern" ]; then[m
+[32m+[m[32m            continue[m
+[32m+[m[32m        fi[m
+[32m+[m[32m        case "$pkg" in[m
+[32m+[m[32m        $pattern)[m
+[32m+[m[32m            IFS=$old_ifs[m
+[32m+[m[32m            return 0[m
+[32m+[m[32m            ;;[m
+[32m+[m[32m        esac[m
+[32m+[m[32m    done[m
+[32m+[m[32m    IFS=$old_ifs[m
+[32m+[m[32m    return 1[m
+[32m+[m[32m}[m
+ [m
+[31m-printf '\n'[m
+[31m-printf '===============================================\n'[m
+[31m-printf 'opkg update\n'[m
+[32m+[m[32mparse_args() {[m
+[32m+[m[32m    while [ $# -gt 0 ]; do[m
+[32m+[m[32m        case "$1" in[m
+[32m+[m[32m        -h|--help)[m
+[32m+[m[32m            usage[m
+[32m+[m[32m            exit "$EX_OK"[m
+[32m+[m[32m            ;;[m
+[32m+[m[32m        -V|--version)[m
+[32m+[m[32m            show_version[m
+[32m+[m[32m            exit "$EX_OK"[m
+[32m+[m[32m            ;;[m
+[32m+[m[32m        --status-file)[m
+[32m+[m[32m            if [ $# -lt 2 ]; then[m
+[32m+[m[32m                fatal 'Опция --status-file требует указать путь' "$EX_USAGE"[m
+[32m+[m[32m            fi[m
+[32m+[m[32m            STATUS_FILE=$2[m
+[32m+[m[32m            shift[m
+[32m+[m[32m            ;;[m
+[32m+[m[32m        --status-file=*)[m
+[32m+[m[32m            STATUS_FILE=${1#--status-file=}[m
+[32m+[m[32m            ;;[m
+[32m+[m[32m        --user-installed-file)[m
+[32m+[m[32m            if [ $# -lt 2 ]; then[m
+[32m+[m[32m                fatal 'Опция --user-installed-file требует указать путь' "$EX_USAGE"[m
+[32m+[m[32m            fi[m
+[32m+[m[32m            USER_INSTALLED_FILE=$2[m
+[32m+[m[32m            shift[m
+[32m+[m[32m            ;;[m
+[32m+[m[32m        --user-installed-file=*)[m
+[32m+[m[32m            USER_INSTALLED_FILE=${1#--user-installed-file=}[m
+[32m+[m[32m            ;;[m
+[32m+[m[32m        -x)[m
+[32m+[m[32m            if [ $# -lt 2 ]; then[m
+[32m+[m[32m                fatal 'Опция -x требует указать шаблон' "$EX_USAGE"[m
+[32m+[m[32m            fi[m
+[32m+[m[32m            append_exclude_pattern "$2"[m
+[32m+[m[32m            shift[m
+[32m+[m[32m            ;;[m
+[32m+[m[32m        --exclude)[m
+[32m+[m[32m            if [ $# -lt 2 ]; then[m
+[32m+[m[32m                fatal 'Опция --exclude требует указать шаблон' "$EX_USAGE"[m
+[32m+[m[32m            fi[m
+[32m+[m[32m            append_exclude_pattern "$2"[m
+[32m+[m[32m            shift[m
+[32m+[m[32m            ;;[m
+[32m+[m[32m        --exclude=*)[m
+[32m+[m[32m            append_exclude_pattern "${1#--exclude=}"[m
+[32m+[m[32m            ;;[m
+[32m+[m[32m        --include-auto-deps)[m
+[32m+[m[32m            INCLUDE_AUTO_DEPS=1[m
+[32m+[m[32m            ;;[m
+[32m+[m[32m        --include-auto-deps=*)[m
+[32m+[m[32m            value=${1#--include-auto-deps=}[m
+[32m+[m[32m            case "$value" in[m
+[32m+[m[32m            ''|0|false|no|off)[m
+[32m+[m[32m                INCLUDE_AUTO_DEPS=0[m
+[32m+[m[32m                ;;[m
+[32m+[m[32m            *)[m
+[32m+[m[32m                INCLUDE_AUTO_DEPS=1[m
+[32m+[m[32m                ;;[m
+[32m+[m[32m            esac[m
+[32m+[m[32m            ;;[m
+[32m+[m[32m        *)[m
+[32m+[m[32m            fatal "Неизвестная опция: $1" "$EX_USAGE"[m
+[32m+[m[32m            ;;[m
+[32m+[m[32m        esac[m
+[32m+[m[32m        shift[m
+[32m+[m[32m    done[m
+[32m+[m[32m}[m
+[32m+[m
+[32m+[m[32mparse_args "$@"[m
+[32m+[m
+[32m+[m[32mif [ -z "$STATUS_FILE" ]; then[m
+[32m+[m[32m    fatal 'Путь к status-файлу не указан' "$EX_USAGE"[m
+[32m+[m[32mfi[m
+[32m+[m
+[32m+[m[32mif [ ! -r "$STATUS_FILE" ]; then[m
+[32m+[m[32m    fatal "Не удалось прочитать status-файл: $STATUS_FILE" "$EX_UNAVAILABLE"[m
+[32m+[m[32mfi[m
+ [m
+[31m-# Получаем самое старое время установки[m
+[31m-DISTRI_TIME=$(awk '/Installed-Time/ {print $2}' /usr/lib/opkg/status | sort -n | head -n 1)[m
+[31m-[m
+[31m-# Ге
