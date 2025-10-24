@@ -1,0 +1,30 @@
+name: Shell quality checks
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  shell-quality:
+    name: Shell quality
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install shell tooling
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y shellcheck shfmt jq
+
+      - name: Run shell quality checks
+        run: scripts/ci/check-shell-quality.sh
+
+      - name: Upload reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: shell-quality-reports
+          path: reports/
+          if-no-files-found: warn

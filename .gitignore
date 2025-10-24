@@ -9,4 +9,5 @@
 # Build artifacts
 build/
 dist/
+reports/
 *.ipk
