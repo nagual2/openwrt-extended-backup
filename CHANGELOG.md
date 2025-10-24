@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.8.1](https://github.com/nagual2/openwrt-extended-backup/compare/v0.8.0...v0.8.1) (2025-10-24)
+
+
+### Bug Fixes
+
+* **user_installed_packages:** rewrite to produce correct deterministic package list ([2005858](https://github.com/nagual2/openwrt-extended-backup/commit/2005858379410d8a7c7089e57b0a3572ea9095f7))
+
 ## [0.8.0](https://github.com/nagual2/openwrt-extended-backup/compare/v0.7.0...v0.8.0) (2025-10-24)
 
 
