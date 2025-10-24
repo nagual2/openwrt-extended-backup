@@ -4,6 +4,10 @@ on:
   push:
   pull_request:
 
+concurrency:
+  group: shell-quality-${{ github.ref == 'refs/heads/main' && 'main' || github.run_id }}
+  cancel-in-progress: ${{ github.ref == 'refs/heads/main' }}
+
 jobs:
   shell-quality:
     name: Shell quality
@@ -15,28 +19,46 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332 # v4.1.7
 
-      - name: Install shell tooling
-        shell: bash
+      - name: Cache shell tooling
+        uses: actions/cache@0c45773b623bea8c8e75f6c82b208c3cf94ea4f9 # v4.0.2
+        with:
+          path: ~/.cache/openwrt-toolkit
+          key: shell-tools-${{ runner.os }}-${{ hashFiles('scripts/ci/install-shell-tools.sh') }}
+          restore-keys: |
+            shell-tools-${{ runner.os }}-
+
+      - name: Install dependencies
         run: |
           set -euo pipefail
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends shellcheck jq ca-certificates
-          SHFMT_VERSION=3.12.0
-          SHFMT_SHA256=d9fbb2a9c33d13f47e7618cf362a914d029d02a6df124064fff04fd688a745ea
-          tmp_dir=$(mktemp -d)
-          curl -fsSL "https://github.com/mvdan/sh/releases/download/v${SHFMT_VERSION}/shfmt_v${SHFMT_VERSION}_linux_amd64" -o "${tmp_dir}/shfmt"
-          echo "${SHFMT_SHA256}  ${tmp_dir}/shfmt" | sha256sum -c -
-          sudo install -m 0755 "${tmp_dir}/shfmt" /usr/local/bin/shfmt
-          rm -rf "${tmp_dir}"
+          sudo apt-get install -y --no-install-recommends jq ca-certificates
+
+      - name: Install shell tooling
+        shell: bash
+        run: ./scripts/ci/install-shell-tools.sh
 
       - name: Run shell quality checks
         shell: bash
         run: ./scripts/ci/check-shell-quality.sh
 
-      - name: Upload reports
+      - name: Upload ShellCheck report
         if: always()
         uses: actions/upload-artifact@26f96dfa697d77e81fd5907df203aa23a56210a8 # v4.3.0
         with:
-          name: shell-quality-reports
-          path: reports/
-          if-no-files-found: warn
+          name: shellcheck-report
+          path: |
+            reports/shellcheck.json
+            reports/shellcheck.txt
+            reports/unquoted-variables.txt
+            reports/unsafe-eval.txt
+            reports/shebang-violations.txt
+            reports/shell-files.txt
+          if-no-files-found: ignore
+
+      - name: Upload shfmt patch
+        if: always()
+        uses: actions/upload-artifact@26f96dfa697d77e81fd5907df203aa23a56210a8 # v4.3.0
+        with:
+          name: shfmt-report
+          path: reports/shfmt.patch
+          if-no-files-found: ignore
