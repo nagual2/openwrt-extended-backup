@@ -8,22 +8,25 @@ jobs:
   shell-quality:
     name: Shell quality
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v4.1.7
 
       - name: Install shell tooling
         run: |
           sudo apt-get update
-          sudo apt-get install -y shellcheck shfmt jq
+          sudo apt-get install -y --no-install-recommends shellcheck shfmt jq
 
       - name: Run shell quality checks
-        run: scripts/ci/check-shell-quality.sh
+        shell: bash
+        run: ./scripts/ci/check-shell-quality.sh
 
       - name: Upload reports
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v4.3.0
         with:
           name: shell-quality-reports
           path: reports/

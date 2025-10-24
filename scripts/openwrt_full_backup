@@ -406,13 +406,13 @@ setup_smb_export() {
         KSMBD_SHARE_EXISTED=0
     fi
 
-    uci set ksmbd.@share[$target_index].name="$KSMBD_SHARE_NAME"
-    uci set ksmbd.@share[$target_index].path="$OUT_DIR"
-    uci set ksmbd.@share[$target_index].guest_ok='no'
-    uci set ksmbd.@share[$target_index].read_only='yes'
-    uci set ksmbd.@share[$target_index].create_mask='0644'
-    uci set ksmbd.@share[$target_index].dir_mask='0755'
-    uci set ksmbd.@share[$target_index].users="$KSMBD_USER"
+    uci set "ksmbd.@share[$target_index].name=$KSMBD_SHARE_NAME"
+    uci set "ksmbd.@share[$target_index].path=$OUT_DIR"
+    uci set "ksmbd.@share[$target_index].guest_ok='no'"
+    uci set "ksmbd.@share[$target_index].read_only='yes'"
+    uci set "ksmbd.@share[$target_index].create_mask='0644'"
+    uci set "ksmbd.@share[$target_index].dir_mask='0755'"
+    uci set "ksmbd.@share[$target_index].users=$KSMBD_USER"
     uci commit ksmbd
 
     KSMBD_SHARE_CREATED=1
