@@ -23,14 +23,22 @@ jobs:
 
       - name: Checkout repository
         if: steps.release.outputs.release_created == 'true'
-        uses: actions/checkout@v4
+        uses: actions/checkout@v4.1.7
         with:
           fetch-depth: 0
           ref: ${{ steps.release.outputs.tag_name }}
 
-      - name: Prepare release artifacts
+      - name: Install packaging tools
         if: steps.release.outputs.release_created == 'true'
         run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends zip
+
+      - name: Prepare release artifacts
+        if: steps.release.outputs.release_created == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
           TAG_NAME="${{ steps.release.outputs.tag_name }}"
           WORKDIR="openwrt-toolkit-${TAG_NAME}"
           mkdir -p "dist/${WORKDIR}/scripts"
@@ -41,7 +49,7 @@ jobs:
 
       - name: Upload release assets
         if: steps.release.outputs.release_created == 'true'
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.release.outputs.tag_name }}
           files: |
