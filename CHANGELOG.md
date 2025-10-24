@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.8.3](https://github.com/nagual2/openwrt-extended-backup/compare/v0.8.2...v0.8.3) (2025-10-24)
+
+
+### Bug Fixes
+
+* **ci:** resolve CI failure by pinning shfmt to compatible version ([2280d04](https://github.com/nagual2/openwrt-extended-backup/commit/2280d045b91bf1b2a309b8ee0e1b04e737e17469))
+
 ## [0.8.2](https://github.com/nagual2/openwrt-extended-backup/compare/v0.8.1...v0.8.2) (2025-10-24)
 
 
