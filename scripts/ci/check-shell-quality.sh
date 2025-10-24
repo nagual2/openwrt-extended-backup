@@ -32,9 +32,9 @@ list_shell_files() {
         fi
 
         case "$path" in
-        */.git/*)
-            continue
-            ;;
+            */.git/*)
+                continue
+                ;;
         esac
 
         if [ -x "$path" ]; then
@@ -43,9 +43,9 @@ list_shell_files() {
         fi
 
         case "$path" in
-        *.sh)
-            printf '%s\n' "$path"
-            ;;
+            *.sh)
+                printf '%s\n' "$path"
+                ;;
         esac
     done
 }
@@ -60,23 +60,22 @@ fi
 while IFS= read -r path; do
     first_line=$(sed -n '1p' "$path" 2>/dev/null || printf '')
     case "$first_line" in
-    '#!/bin/sh'|'#!/usr/bin/env sh')
-        ;;
-    '#!'*)
-        {
-            printf '%s: unexpected shebang: %s\n' "$path" "$first_line"
-        } >>"$SHEBANG_REPORT"
-        ;;
-    '')
-        {
-            printf '%s: missing shebang\n' "$path"
-        } >>"$SHEBANG_REPORT"
-        ;;
-    *)
-        {
-            printf '%s: missing shebang\n' "$path"
-        } >>"$SHEBANG_REPORT"
-        ;;
+        '#!/bin/sh' | '#!/usr/bin/env sh') ;;
+        '#!'*)
+            {
+                printf '%s: unexpected shebang: %s\n' "$path" "$first_line"
+            } >>"$SHEBANG_REPORT"
+            ;;
+        '')
+            {
+                printf '%s: missing shebang\n' "$path"
+            } >>"$SHEBANG_REPORT"
+            ;;
+        *)
+            {
+                printf '%s: missing shebang\n' "$path"
+            } >>"$SHEBANG_REPORT"
+            ;;
     esac
 
     awk '
@@ -142,7 +141,7 @@ if [ -f "$SHELLCHECK_JSON" ] && jq -e 'length > 0' "$SHELLCHECK_JSON" >/dev/null
 fi
 
 UNQUOTED_ERRORS=0
-if [ -f "$SHELLCHECK_JSON" ] && \
+if [ -f "$SHELLCHECK_JSON" ] &&
     jq -e 'map(select(.code == 2046 or .code == 2086 or .code == 2145)) | length > 0' \
         "$SHELLCHECK_JSON" >/dev/null 2>&1; then
     jq -r 'map(select(.code == 2046 or .code == 2086 or .code == 2145))[] |
@@ -179,7 +178,7 @@ if [ "$UNQUOTED_ERRORS" -ne 0 ] && [ -f "$UNQUOTED_REPORT" ]; then
 fi
 
 EXIT_STATUS=0
-if [ "$SHEBANG_ERRORS" -ne 0 ] || [ "$EVAL_ERRORS" -ne 0 ] || [ "$SHFMT_STATUS" -ne 0 ] || \
+if [ "$SHEBANG_ERRORS" -ne 0 ] || [ "$EVAL_ERRORS" -ne 0 ] || [ "$SHFMT_STATUS" -ne 0 ] ||
     [ "$SHELLCHECK_STATUS" -ne 0 ] || [ "$UNQUOTED_ERRORS" -ne 0 ]; then
     EXIT_STATUS=1
 fi
