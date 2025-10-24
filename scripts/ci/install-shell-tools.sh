@@ -10,10 +10,24 @@ SHFMT_SHA256="27b3c6f9d9592fc5b4856c341d1ff2c88856709b9e76469313642a1d7b558fe0"
 
 TOOLS_ROOT=${TOOLS_ROOT:-"$HOME/.cache/openwrt-toolkit"}
 BIN_DIR="$TOOLS_ROOT/bin"
+VERSION_FILE="$TOOLS_ROOT/.tool-versions"
+EXPECTED_SIGNATURE="shellcheck:${SHELLCHECK_VERSION};shfmt:${SHFMT_VERSION}"
 
-if [ ! -d "$BIN_DIR" ]; then
-    mkdir -p "$BIN_DIR"
+CURRENT_SIGNATURE=""
+if [ -f "$VERSION_FILE" ]; then
+    if ! IFS= read -r CURRENT_SIGNATURE <"$VERSION_FILE"; then
+        CURRENT_SIGNATURE=""
+    fi
 fi
+
+if [ "$CURRENT_SIGNATURE" != "$EXPECTED_SIGNATURE" ]; then
+    if [ -e "$BIN_DIR" ]; then
+        printf 'Cached tool versions are incompatible. Clearing tool cache.\n'
+        rm -rf "$BIN_DIR"
+    fi
+fi
+
+mkdir -p "$BIN_DIR"
 
 case ":$PATH:" in
     *":$BIN_DIR:"*) ;;
@@ -101,3 +115,5 @@ ensure_shfmt() {
 
 ensure_shellcheck
 ensure_shfmt
+
+printf '%s\n' "$EXPECTED_SIGNATURE" >"$VERSION_FILE"
