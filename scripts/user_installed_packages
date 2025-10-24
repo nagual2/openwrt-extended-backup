@@ -7,17 +7,17 @@ PROGRAM=$(basename "$0")
 SCRIPT_PATH=$0
 
 case "$SCRIPT_PATH" in
-*/*)
-    SCRIPT_SOURCE=$(dirname "$SCRIPT_PATH")
-    ;;
-*)
-    LOOKUP=$(command -v -- "$SCRIPT_PATH" 2>/dev/null || printf '')
-    if [ -n "$LOOKUP" ]; then
-        SCRIPT_SOURCE=$(dirname "$LOOKUP")
-    else
-        SCRIPT_SOURCE='.'
-    fi
-    ;;
+    */*)
+        SCRIPT_SOURCE=$(dirname "$SCRIPT_PATH")
+        ;;
+    *)
+        LOOKUP=$(command -v -- "$SCRIPT_PATH" 2>/dev/null || printf '')
+        if [ -n "$LOOKUP" ]; then
+            SCRIPT_SOURCE=$(dirname "$LOOKUP")
+        else
+            SCRIPT_SOURCE='.'
+        fi
+        ;;
 esac
 
 if ! SCRIPT_DIR=$(cd "$SCRIPT_SOURCE" 2>/dev/null && pwd); then
@@ -102,11 +102,12 @@ should_exclude() {
         if [ -z "$pattern" ]; then
             continue
         fi
+        # shellcheck disable=SC2254 # patterns are treated as glob expressions for matching
         case "$pkg" in
-        $pattern)
-            IFS=$old_ifs
-            return 0
-            ;;
+            $pattern)
+                IFS=$old_ifs
+                return 0
+                ;;
         esac
     done
     IFS=$old_ifs
@@ -116,68 +117,68 @@ should_exclude() {
 parse_args() {
     while [ $# -gt 0 ]; do
         case "$1" in
-        -h|--help)
-            usage
-            exit "$EX_OK"
-            ;;
-        -V|--version)
-            show_version
-            exit "$EX_OK"
-            ;;
-        --status-file)
-            if [ $# -lt 2 ]; then
-                fatal 'Опция --status-file требует указать путь' "$EX_USAGE"
-            fi
-            STATUS_FILE=$2
-            shift
-            ;;
-        --status-file=*)
-            STATUS_FILE=${1#--status-file=}
-            ;;
-        --user-installed-file)
-            if [ $# -lt 2 ]; then
-                fatal 'Опция --user-installed-file требует указать путь' "$EX_USAGE"
-            fi
-            USER_INSTALLED_FILE=$2
-            shift
-            ;;
-        --user-installed-file=*)
-            USER_INSTALLED_FILE=${1#--user-installed-file=}
-            ;;
-        -x)
-            if [ $# -lt 2 ]; then
-                fatal 'Опция -x требует указать шаблон' "$EX_USAGE"
-            fi
-            append_exclude_pattern "$2"
-            shift
-            ;;
-        --exclude)
-            if [ $# -lt 2 ]; then
-                fatal 'Опция --exclude требует указать шаблон' "$EX_USAGE"
-            fi
-            append_exclude_pattern "$2"
-            shift
-            ;;
-        --exclude=*)
-            append_exclude_pattern "${1#--exclude=}"
-            ;;
-        --include-auto-deps)
-            INCLUDE_AUTO_DEPS=1
-            ;;
-        --include-auto-deps=*)
-            value=${1#--include-auto-deps=}
-            case "$value" in
-            ''|0|false|no|off)
-                INCLUDE_AUTO_DEPS=0
+            -h | --help)
+                usage
+                exit "$EX_OK"
                 ;;
-            *)
+            -V | --version)
+                show_version
+                exit "$EX_OK"
+                ;;
+            --status-file)
+                if [ $# -lt 2 ]; then
+                    fatal 'Опция --status-file требует указать путь' "$EX_USAGE"
+                fi
+                STATUS_FILE=$2
+                shift
+                ;;
+            --status-file=*)
+                STATUS_FILE=${1#--status-file=}
+                ;;
+            --user-installed-file)
+                if [ $# -lt 2 ]; then
+                    fatal 'Опция --user-installed-file требует указать путь' "$EX_USAGE"
+                fi
+                USER_INSTALLED_FILE=$2
+                shift
+                ;;
+            --user-installed-file=*)
+                USER_INSTALLED_FILE=${1#--user-installed-file=}
+                ;;
+            -x)
+                if [ $# -lt 2 ]; then
+                    fatal 'Опция -x требует указать шаблон' "$EX_USAGE"
+                fi
+                append_exclude_pattern "$2"
+                shift
+                ;;
+            --exclude)
+                if [ $# -lt 2 ]; then
+                    fatal 'Опция --exclude требует указать шаблон' "$EX_USAGE"
+                fi
+                append_exclude_pattern "$2"
+                shift
+                ;;
+            --exclude=*)
+                append_exclude_pattern "${1#--exclude=}"
+                ;;
+            --include-auto-deps)
                 INCLUDE_AUTO_DEPS=1
                 ;;
-            esac
-            ;;
-        *)
-            fatal "Неизвестная опция: $1" "$EX_USAGE"
-            ;;
+            --include-auto-deps=*)
+                value=${1#--include-auto-deps=}
+                case "$value" in
+                    '' | 0 | false | no | off)
+                        INCLUDE_AUTO_DEPS=0
+                        ;;
+                    *)
+                        INCLUDE_AUTO_DEPS=1
+                        ;;
+                esac
+                ;;
+            *)
+                fatal "Неизвестная опция: $1" "$EX_USAGE"
+                ;;
         esac
         shift
     done
@@ -284,7 +285,7 @@ if [ -n "$USER_INSTALLED_FILE" ]; then
     ' "$USER_INSTALLED_FILE" | sort -u)
 fi
 
-COMBINED_PACKAGES=$( {
+COMBINED_PACKAGES=$({
     if [ -n "$STATUS_PACKAGES" ]; then
         printf '%s\n' "$STATUS_PACKAGES"
     fi
@@ -307,32 +308,32 @@ if [ -n "$COMBINED_PACKAGES" ]; then
             continue
         fi
         case "$pkg" in
-        luci-i18n-*)
-            LUCI_COUNT=$((LUCI_COUNT + 1))
-            if [ -z "$LUCI_LINES" ]; then
-                LUCI_LINES=$pkg
-            else
-                LUCI_LINES=$(printf '%s\n%s' "$LUCI_LINES" "$pkg")
-            fi
-            if [ -z "$LUCI_ARGS" ]; then
-                LUCI_ARGS=$pkg
-            else
-                LUCI_ARGS="$LUCI_ARGS $pkg"
-            fi
-            ;;
-        *)
-            MAIN_COUNT=$((MAIN_COUNT + 1))
-            if [ -z "$MAIN_LINES" ]; then
-                MAIN_LINES=$pkg
-            else
-                MAIN_LINES=$(printf '%s\n%s' "$MAIN_LINES" "$pkg")
-            fi
-            if [ -z "$MAIN_ARGS" ]; then
-                MAIN_ARGS=$pkg
-            else
-                MAIN_ARGS="$MAIN_ARGS $pkg"
-            fi
-            ;;
+            luci-i18n-*)
+                LUCI_COUNT=$((LUCI_COUNT + 1))
+                if [ -z "$LUCI_LINES" ]; then
+                    LUCI_LINES=$pkg
+                else
+                    LUCI_LINES=$(printf '%s\n%s' "$LUCI_LINES" "$pkg")
+                fi
+                if [ -z "$LUCI_ARGS" ]; then
+                    LUCI_ARGS=$pkg
+                else
+                    LUCI_ARGS="$LUCI_ARGS $pkg"
+                fi
+                ;;
+            *)
+                MAIN_COUNT=$((MAIN_COUNT + 1))
+                if [ -z "$MAIN_LINES" ]; then
+                    MAIN_LINES=$pkg
+                else
+                    MAIN_LINES=$(printf '%s\n%s' "$MAIN_LINES" "$pkg")
+                fi
+                if [ -z "$MAIN_ARGS" ]; then
+                    MAIN_ARGS=$pkg
+                else
+                    MAIN_ARGS="$MAIN_ARGS $pkg"
+                fi
+                ;;
         esac
     done <<EOF
 $COMBINED_PACKAGES

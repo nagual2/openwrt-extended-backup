@@ -3,25 +3,21 @@
 
 set -eu
 
-if set -o pipefail 2>/dev/null; then
-    :
-fi
-
 PROGRAM=$(basename "$0")
 SCRIPT_PATH=$0
 
 case "$SCRIPT_PATH" in
-*/*)
-    SCRIPT_SOURCE=$(dirname "$SCRIPT_PATH")
-    ;;
-*)
-    LOOKUP=$(command -v -- "$SCRIPT_PATH" 2>/dev/null || printf '')
-    if [ -n "$LOOKUP" ]; then
-        SCRIPT_SOURCE=$(dirname "$LOOKUP")
-    else
-        SCRIPT_SOURCE='.'
-    fi
-    ;;
+    */*)
+        SCRIPT_SOURCE=$(dirname "$SCRIPT_PATH")
+        ;;
+    *)
+        LOOKUP=$(command -v -- "$SCRIPT_PATH" 2>/dev/null || printf '')
+        if [ -n "$LOOKUP" ]; then
+            SCRIPT_SOURCE=$(dirname "$LOOKUP")
+        else
+            SCRIPT_SOURCE='.'
+        fi
+        ;;
 esac
 
 if ! SCRIPT_DIR=$(cd "$SCRIPT_SOURCE" 2>/dev/null && pwd); then
@@ -134,12 +130,12 @@ require_command() {
 
 to_absolute_path() {
     case "$1" in
-    /*)
-        printf '%s\n' "$1"
-        ;;
-    *)
-        printf '%s/%s\n' "$(pwd)" "$1"
-        ;;
+        /*)
+            printf '%s\n' "$1"
+            ;;
+        *)
+            printf '%s/%s\n' "$(pwd)" "$1"
+            ;;
     esac
 }
 
@@ -195,70 +191,70 @@ trap 'cleanup 143' TERM
 parse_args() {
     while [ $# -gt 0 ]; do
         case "$1" in
-        --export=*)
-            EXPORT_MODE=${1#--export=}
-            ;;
-        --export)
-            shift || fatal 'Опция --export требует аргумент' "$EX_USAGE"
-            EXPORT_MODE=$1
-            ;;
-        --emit-scp-cmd)
-            EMIT_SCP_CMD=1
-            ;;
-        --ssh-host=*)
-            SSH_HOST=${1#--ssh-host=}
-            ;;
-        --ssh-host)
-            shift || fatal 'Опция --ssh-host требует аргумент' "$EX_USAGE"
-            SSH_HOST=$1
-            ;;
-        --ssh-port=*)
-            SSH_PORT=${1#--ssh-port=}
-            ;;
-        --ssh-port)
-            shift || fatal 'Опция --ssh-port требует аргумент' "$EX_USAGE"
-            SSH_PORT=$1
-            ;;
-        --ssh-user=*)
-            SSH_USER=${1#--ssh-user=}
-            ;;
-        --ssh-user)
-            shift || fatal 'Опция --ssh-user требует аргумент' "$EX_USAGE"
-            SSH_USER=$1
-            ;;
-        --out-dir=*)
-            OUT_DIR=${1#--out-dir=}
-            ;;
-        --out-dir)
-            shift || fatal 'Опция --out-dir требует аргумент' "$EX_USAGE"
-            OUT_DIR=$1
-            ;;
-        -v)
-            if [ "$LOG_LEVEL" -lt 2 ]; then
-                LOG_LEVEL=$((LOG_LEVEL + 1))
-            fi
-            ;;
-        -q | --quiet)
-            LOG_LEVEL=0
-            ;;
-        -h | --help)
-            usage
-            exit "$EX_OK"
-            ;;
-        -V | --version)
-            show_version
-            exit "$EX_OK"
-            ;;
-        --)
-            shift
-            break
-            ;;
-        -*)
-            fatal "Неизвестная опция: $1" "$EX_USAGE"
-            ;;
-        *)
-            fatal "Неожиданный аргумент: $1" "$EX_USAGE"
-            ;;
+            --export=*)
+                EXPORT_MODE=${1#--export=}
+                ;;
+            --export)
+                shift || fatal 'Опция --export требует аргумент' "$EX_USAGE"
+                EXPORT_MODE=$1
+                ;;
+            --emit-scp-cmd)
+                EMIT_SCP_CMD=1
+                ;;
+            --ssh-host=*)
+                SSH_HOST=${1#--ssh-host=}
+                ;;
+            --ssh-host)
+                shift || fatal 'Опция --ssh-host требует аргумент' "$EX_USAGE"
+                SSH_HOST=$1
+                ;;
+            --ssh-port=*)
+                SSH_PORT=${1#--ssh-port=}
+                ;;
+            --ssh-port)
+                shift || fatal 'Опция --ssh-port требует аргумент' "$EX_USAGE"
+                SSH_PORT=$1
+                ;;
+            --ssh-user=*)
+                SSH_USER=${1#--ssh-user=}
+                ;;
+            --ssh-user)
+                shift || fatal 'Опция --ssh-user требует аргумент' "$EX_USAGE"
+                SSH_USER=$1
+                ;;
+            --out-dir=*)
+                OUT_DIR=${1#--out-dir=}
+                ;;
+            --out-dir)
+                shift || fatal 'Опция --out-dir требует аргумент' "$EX_USAGE"
+                OUT_DIR=$1
+                ;;
+            -v)
+                if [ "$LOG_LEVEL" -lt 2 ]; then
+                    LOG_LEVEL=$((LOG_LEVEL + 1))
+                fi
+                ;;
+            -q | --quiet)
+                LOG_LEVEL=0
+                ;;
+            -h | --help)
+                usage
+                exit "$EX_OK"
+                ;;
+            -V | --version)
+                show_version
+                exit "$EX_OK"
+                ;;
+            --)
+                shift
+                break
+                ;;
+            -*)
+                fatal "Неизвестная опция: $1" "$EX_USAGE"
+                ;;
+            *)
+                fatal "Неожиданный аргумент: $1" "$EX_USAGE"
+                ;;
         esac
         shift
     done
@@ -268,17 +264,16 @@ parse_args() {
     fi
 
     case "$EXPORT_MODE" in
-    scp | smb | local)
-        ;;
-    *)
-        fatal "Неподдерживаемый режим экспорта: $EXPORT_MODE" "$EX_USAGE"
-        ;;
+        scp | smb | local) ;;
+        *)
+            fatal "Неподдерживаемый режим экспорта: $EXPORT_MODE" "$EX_USAGE"
+            ;;
     esac
 
     case "$SSH_PORT" in
-    '' | *[!0-9]*)
-        fatal 'Порт SSH должен быть целым числом' "$EX_USAGE"
-        ;;
+        '' | *[!0-9]*)
+            fatal 'Порт SSH должен быть целым числом' "$EX_USAGE"
+            ;;
     esac
 
     OUT_DIR=$(to_absolute_path "$OUT_DIR")
@@ -498,15 +493,15 @@ prepare_environment
 create_archive
 
 case "$EXPORT_MODE" in
-scp)
-    emit_scp_instruction
-    ;;
-smb)
-    setup_smb_export
-    ;;
-local)
-    log_info "Архив сохранён в $ARCHIVE_PATH"
-    ;;
+    scp)
+        emit_scp_instruction
+        ;;
+    smb)
+        setup_smb_export
+        ;;
+    local)
+        log_info "Архив сохранён в $ARCHIVE_PATH"
+        ;;
 esac
 
 exit "$EX_OK"

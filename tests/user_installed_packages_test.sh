@@ -15,7 +15,7 @@ TMP_NO_LUCI=$(mktemp)
 TMP_INCLUDE_AUTO=$(mktemp)
 
 cleanup() {
-	rm -f "$TMP_DEFAULT" "$TMP_NO_LUCI" "$TMP_INCLUDE_AUTO"
+    rm -f "$TMP_DEFAULT" "$TMP_NO_LUCI" "$TMP_INCLUDE_AUTO"
 }
 
 trap cleanup EXIT INT TERM

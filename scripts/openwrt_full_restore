@@ -4,17 +4,17 @@ PROGRAM=$(basename "$0")
 SCRIPT_PATH=$0
 
 case "$SCRIPT_PATH" in
-*/*)
-    SCRIPT_SOURCE=$(dirname "$SCRIPT_PATH")
-    ;;
-*)
-    LOOKUP=$(command -v -- "$SCRIPT_PATH" 2>/dev/null)
-    if [ -n "$LOOKUP" ]; then
-        SCRIPT_SOURCE=$(dirname "$LOOKUP")
-    else
-        SCRIPT_SOURCE='.'
-    fi
-    ;;
+    */*)
+        SCRIPT_SOURCE=$(dirname "$SCRIPT_PATH")
+        ;;
+    *)
+        LOOKUP=$(command -v -- "$SCRIPT_PATH" 2>/dev/null)
+        if [ -n "$LOOKUP" ]; then
+            SCRIPT_SOURCE=$(dirname "$LOOKUP")
+        else
+            SCRIPT_SOURCE='.'
+        fi
+        ;;
 esac
 
 if ! SCRIPT_DIR=$(cd "$SCRIPT_SOURCE" 2>/dev/null && pwd); then
@@ -95,36 +95,35 @@ require_command() {
 
 resolve_path() {
     case "$1" in
-    /*)
-        printf '%s\n' "$1"
-        ;;
-    *)
-        case "$1" in
-        *'/'*)
-            DIR_PART=$(dirname "$1")
-            BASENAME=$(basename "$1")
-            if DIR_REAL=$(cd "$DIR_PART" 2>/dev/null && pwd); then
-                printf '%s/%s\n' "$DIR_REAL" "$BASENAME"
-            else
-                printf '%s/%s\n' "$(pwd)" "$1"
-            fi
+        /*)
+            printf '%s\n' "$1"
             ;;
         *)
-            printf '%s/%s\n' "$(pwd)" "$1"
+            case "$1" in
+                *'/'*)
+                    DIR_PART=$(dirname "$1")
+                    BASENAME=$(basename "$1")
+                    if DIR_REAL=$(cd "$DIR_PART" 2>/dev/null && pwd); then
+                        printf '%s/%s\n' "$DIR_REAL" "$BASENAME"
+                    else
+                        printf '%s/%s\n' "$(pwd)" "$1"
+                    fi
+                    ;;
+                *)
+                    printf '%s/%s\n' "$(pwd)" "$1"
+                    ;;
+            esac
             ;;
-        esac
-        ;;
     esac
 }
 
 add_service() {
     service=$1
     case " $SERVICES_TO_RESTART " in
-    *" $service "*)
-        ;;
-    *)
-        SERVICES_TO_RESTART="$SERVICES_TO_RESTART $service"
-        ;;
+        *" $service "*) ;;
+        *)
+            SERVICES_TO_RESTART="$SERVICES_TO_RESTART $service"
+            ;;
     esac
 }
 
@@ -135,9 +134,9 @@ confirm_action() {
     printf 'Продолжить восстановление? (\033[1;32my\033[0m/\033[0mn): '
     IFS= read -r answer
     case ${answer:-y} in
-    [Yy]*)
-        return 0
-        ;;
+        [Yy]*)
+            return 0
+            ;;
     esac
     printf 'Операция отменена пользователем.\n'
     return 1
@@ -174,14 +173,14 @@ maybe_run_packages() {
         printf '\nВыполнить сохранённый список пакетов (например, /tmp/opkg-user-packages.sh)? (\033[1;32my\033[0m/\033[0mn): '
         IFS= read -r answer
         case ${answer:-n} in
-        [Yy]*)
-            printf 'Укажите путь к скрипту со списком пакетов: '
-            IFS= read -r path
-            ;;
-        *)
-            PACKAGES_RESULT='skipped'
-            return
-            ;;
+            [Yy]*)
+                printf 'Укажите путь к скрипту со списком пакетов: '
+                IFS= read -r path
+                ;;
+            *)
+                PACKAGES_RESULT='skipped'
+                return
+                ;;
         esac
     fi
 
@@ -217,68 +216,68 @@ restart_services() {
 
     for service in $SERVICES_TO_RESTART; do
         case "$service" in
-        wifi)
-            if command -v wifi >/dev/null 2>&1; then
-                if wifi reload >/dev/null 2>&1; then
-                    printf '  [ok] wifi reload\n'
-                    SERVICE_RESULTS="$SERVICE_RESULTS\nwifi reload: ok"
+            wifi)
+                if command -v wifi >/dev/null 2>&1; then
+                    if wifi reload >/dev/null 2>&1; then
+                        printf '  [ok] wifi reload\n'
+                        SERVICE_RESULTS="$SERVICE_RESULTS\nwifi reload: ok"
+                    else
+                        printf '  [!!] wifi reload завершилась с ошибкой\n' >&2
+                        SERVICE_RESULTS="$SERVICE_RESULTS\nwifi reload: failed"
+                    fi
                 else
-                    printf '  [!!] wifi reload завершилась с ошибкой\n' >&2
-                    SERVICE_RESULTS="$SERVICE_RESULTS\nwifi reload: failed"
+                    printf '  [skip] wifi: скрипт не найден\n'
+                    SERVICE_RESULTS="$SERVICE_RESULTS\nwifi reload: skipped (скрипт не найден)"
                 fi
-            else
-                printf '  [skip] wifi: скрипт не найден\n'
-                SERVICE_RESULTS="$SERVICE_RESULTS\nwifi reload: skipped (скрипт не найден)"
-            fi
-            ;;
-        dnsmasq)
-            if [ -x /etc/init.d/dnsmasq ]; then
-                if /etc/init.d/dnsmasq restart >/dev/null 2>&1; then
-                    printf '  [ok] dnsmasq restart\n'
-                    SERVICE_RESULTS="$SERVICE_RESULTS\ndnsmasq restart: ok"
+                ;;
+            dnsmasq)
+                if [ -x /etc/init.d/dnsmasq ]; then
+                    if /etc/init.d/dnsmasq restart >/dev/null 2>&1; then
+                        printf '  [ok] dnsmasq restart\n'
+                        SERVICE_RESULTS="$SERVICE_RESULTS\ndnsmasq restart: ok"
+                    else
+                        printf '  [!!] dnsmasq restart завершилась с ошибкой\n' >&2
+                        SERVICE_RESULTS="$SERVICE_RESULTS\ndnsmasq restart: failed"
+                    fi
                 else
-                    printf '  [!!] dnsmasq restart завершилась с ошибкой\n' >&2
-                    SERVICE_RESULTS="$SERVICE_RESULTS\ndnsmasq restart: failed"
+                    printf '  [skip] dnsmasq: нет /etc/init.d/dnsmasq\n'
+                    SERVICE_RESULTS="$SERVICE_RESULTS\ndnsmasq restart: skipped (нет /etc/init.d/dnsmasq)"
                 fi
-            else
-                printf '  [skip] dnsmasq: нет /etc/init.d/dnsmasq\n'
-                SERVICE_RESULTS="$SERVICE_RESULTS\ndnsmasq restart: skipped (нет /etc/init.d/dnsmasq)"
-            fi
-            ;;
-        sqm)
-            if [ -x /etc/init.d/sqm ]; then
-                if /etc/init.d/sqm restart >/dev/null 2>&1; then
-                    printf '  [ok] sqm restart\n'
-                    SERVICE_RESULTS="$SERVICE_RESULTS\nsqm restart: ok"
+                ;;
+            sqm)
+                if [ -x /etc/init.d/sqm ]; then
+                    if /etc/init.d/sqm restart >/dev/null 2>&1; then
+                        printf '  [ok] sqm restart\n'
+                        SERVICE_RESULTS="$SERVICE_RESULTS\nsqm restart: ok"
+                    else
+                        printf '  [!!] sqm restart завершилась с ошибкой\n' >&2
+                        SERVICE_RESULTS="$SERVICE_RESULTS\nsqm restart: failed"
+                    fi
                 else
-                    printf '  [!!] sqm restart завершилась с ошибкой\n' >&2
-                    SERVICE_RESULTS="$SERVICE_RESULTS\nsqm restart: failed"
+                    printf '  [skip] sqm: нет /etc/init.d/sqm\n'
+                    SERVICE_RESULTS="$SERVICE_RESULTS\nsqm restart: skipped (нет /etc/init.d/sqm)"
                 fi
-            else
-                printf '  [skip] sqm: нет /etc/init.d/sqm\n'
-                SERVICE_RESULTS="$SERVICE_RESULTS\nsqm restart: skipped (нет /etc/init.d/sqm)"
-            fi
-            ;;
-        *)
-            if [ -x "/etc/init.d/$service" ]; then
-                action='reload'
-                case "$service" in
-                dropbear)
-                    action='restart'
-                    ;;
-                esac
-                if "/etc/init.d/$service" "$action" >/dev/null 2>&1; then
-                    printf '  [ok] %s %s\n' "$service" "$action"
-                    SERVICE_RESULTS="$SERVICE_RESULTS\n$service $action: ok"
+                ;;
+            *)
+                if [ -x "/etc/init.d/$service" ]; then
+                    action='reload'
+                    case "$service" in
+                        dropbear)
+                            action='restart'
+                            ;;
+                    esac
+                    if "/etc/init.d/$service" "$action" >/dev/null 2>&1; then
+                        printf '  [ok] %s %s\n' "$service" "$action"
+                        SERVICE_RESULTS="$SERVICE_RESULTS\n$service $action: ok"
+                    else
+                        printf '  [!!] %s %s завершилась с ошибкой\n' "$service" "$action" >&2
+                        SERVICE_RESULTS="$SERVICE_RESULTS\n$service $action: failed"
+                    fi
                 else
-                    printf '  [!!] %s %s завершилась с ошибкой\n' "$service" "$action" >&2
-                    SERVICE_RESULTS="$SERVICE_RESULTS\n$service $action: failed"
+                    printf '  [skip] %s: нет /etc/init.d/%s\n' "$service" "$service"
+                    SERVICE_RESULTS="$SERVICE_RESULTS\n$service: skipped (нет /etc/init.d/$service)"
                 fi
-            else
-                printf '  [skip] %s: нет /etc/init.d/%s\n' "$service" "$service"
-                SERVICE_RESULTS="$SERVICE_RESULTS\n$service: skipped (нет /etc/init.d/$service)"
-            fi
-            ;;
+                ;;
         esac
     done
 }
@@ -291,57 +290,57 @@ NC='\033[0m'
 # Опции CLI
 while [ $# -gt 0 ]; do
     case "$1" in
-    -V|--version)
-        show_version
-        exit 0
-        ;;
-    -h|--help)
-        show_help
-        exit 0
-        ;;
-    -d|--dry-run)
-        DRY_RUN=1
-        ;;
-    -y|--yes)
-        AUTO_YES=1
-        ;;
-    -a|--archive)
-        opt=$1
-        shift
-        if [ $# -eq 0 ]; then
-            printf '%s: опция %s требует путь к архиву\n' "$PROGRAM" "$opt" >&2
-            exit 1
-        fi
-        ARCHIVE_PATH=$1
-        ;;
-    -p|--packages)
-        opt=$1
-        shift
-        if [ $# -eq 0 ]; then
-            printf '%s: опция %s требует путь к файлу\n' "$PROGRAM" "$opt" >&2
-            exit 1
-        fi
-        PACKAGES_PATH=$1
-        ;;
-    --no-packages)
-        SKIP_PACKAGES=1
-        ;;
-    --)
-        shift
-        break
-        ;;
-    -*)
-        printf '%s: неизвестная опция %s\n' "$PROGRAM" "$1" >&2
-        exit 1
-        ;;
-    *)
-        if [ -z "$ARCHIVE_PATH" ]; then
+        -V | --version)
+            show_version
+            exit 0
+            ;;
+        -h | --help)
+            show_help
+            exit 0
+            ;;
+        -d | --dry-run)
+            DRY_RUN=1
+            ;;
+        -y | --yes)
+            AUTO_YES=1
+            ;;
+        -a | --archive)
+            opt=$1
+            shift
+            if [ $# -eq 0 ]; then
+                printf '%s: опция %s требует путь к архиву\n' "$PROGRAM" "$opt" >&2
+                exit 1
+            fi
             ARCHIVE_PATH=$1
-        else
-            printf '%s: лишний аргумент %s\n' "$PROGRAM" "$1" >&2
+            ;;
+        -p | --packages)
+            opt=$1
+            shift
+            if [ $# -eq 0 ]; then
+                printf '%s: опция %s требует путь к файлу\n' "$PROGRAM" "$opt" >&2
+                exit 1
+            fi
+            PACKAGES_PATH=$1
+            ;;
+        --no-packages)
+            SKIP_PACKAGES=1
+            ;;
+        --)
+            shift
+            break
+            ;;
+        -*)
+            printf '%s: неизвестная опция %s\n' "$PROGRAM" "$1" >&2
             exit 1
-        fi
-        ;;
+            ;;
+        *)
+            if [ -z "$ARCHIVE_PATH" ]; then
+                ARCHIVE_PATH=$1
+            else
+                printf '%s: лишний аргумент %s\n' "$PROGRAM" "$1" >&2
+                exit 1
+            fi
+            ;;
     esac
     shift
 done
@@ -409,9 +408,9 @@ printf '%s\n' "$TOTAL_ITEMS"
 while IFS= read -r entry || [ -n "$entry" ]; do
     [ -z "$entry" ] && continue
     case "$entry" in
-    ./*)
-        entry=${entry#./}
-        ;;
+        ./*)
+            entry=${entry#./}
+            ;;
     esac
     entry=${entry#*/./}
     entry=${entry#/}
@@ -438,30 +437,30 @@ while IFS= read -r entry || [ -n "$entry" ]; do
     fi
 
     case "$entry" in
-    overlay/upper/*)
-        effective=${entry#overlay/upper/}
-        case "$effective" in
-        etc/config/network|etc/config/wireless)
-            add_service network
-            add_service wifi
+        overlay/upper/*)
+            effective=${entry#overlay/upper/}
+            case "$effective" in
+                etc/config/network | etc/config/wireless)
+                    add_service network
+                    add_service wifi
+                    ;;
+                etc/config/firewall)
+                    add_service firewall
+                    ;;
+                etc/config/dhcp)
+                    add_service dnsmasq
+                    ;;
+                etc/config/uhttpd)
+                    add_service uhttpd
+                    ;;
+                etc/config/dropbear)
+                    add_service dropbear
+                    ;;
+                etc/config/sqm)
+                    add_service sqm
+                    ;;
+            esac
             ;;
-        etc/config/firewall)
-            add_service firewall
-            ;;
-        etc/config/dhcp)
-            add_service dnsmasq
-            ;;
-        etc/config/uhttpd)
-            add_service uhttpd
-            ;;
-        etc/config/dropbear)
-            add_service dropbear
-            ;;
-        etc/config/sqm)
-            add_service sqm
-            ;;
-        esac
-        ;;
     esac
 
 done <"$LIST_FILE"
@@ -550,21 +549,21 @@ else
 fi
 
 case "$PACKAGES_RESULT" in
-executed)
-    printf '  Пакеты:                 выполнен скрипт %s\n' "$PACKAGES_NOTE"
-    ;;
-failed)
-    printf '  Пакеты:                 скрипт %s завершился ошибкой\n' "$PACKAGES_NOTE"
-    ;;
-error)
-    printf '  Пакеты:                 не удалось запустить (%s)\n' "$PACKAGES_NOTE"
-    ;;
-skipped)
-    printf '  Пакеты:                 пропущено\n'
-    ;;
-*)
-    printf '  Пакеты:                 %s\n' "$PACKAGES_RESULT"
-    ;;
+    executed)
+        printf '  Пакеты:                 выполнен скрипт %s\n' "$PACKAGES_NOTE"
+        ;;
+    failed)
+        printf '  Пакеты:                 скрипт %s завершился ошибкой\n' "$PACKAGES_NOTE"
+        ;;
+    error)
+        printf '  Пакеты:                 не удалось запустить (%s)\n' "$PACKAGES_NOTE"
+        ;;
+    skipped)
+        printf '  Пакеты:                 пропущено\n'
+        ;;
+    *)
+        printf '  Пакеты:                 %s\n' "$PACKAGES_RESULT"
+        ;;
 esac
 
 if [ -n "$SERVICE_RESULTS" ]; then
