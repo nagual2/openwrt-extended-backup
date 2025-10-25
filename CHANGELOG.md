@@ -54,4 +54,4 @@
 
 All notable changes to this project will be documented in this file.
 
-The release workflow is driven by [release-please](https://github.com/googleapis/release-please) and will update this changelog automatically.
+Before tagging a new release (`v*`), update the `VERSION` file and add a matching section above so the automated workflow can publish the release notes.
