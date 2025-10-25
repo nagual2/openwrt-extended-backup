@@ -1,0 +1,64 @@
+#!/bin/sh
+# Common helpers for mock command shims.
+set -eu
+
+mock_normalize() {
+    printf '%s' "$1" | tr '[:lower:]' '[:upper:]' | tr -c 'A-Z0-9' '_'
+}
+
+mock_get_env() {
+    eval "printf '%s' \"\${$1-}\""
+}
+
+mock_log_command() {
+    command_name="$1"
+    shift
+    log_path="${MOCK_COMMAND_LOG-}"
+    if [ -z "$log_path" ]; then
+        return
+    fi
+    {
+        printf '%s' "$command_name"
+        while [ "$#" -gt 0 ]; do
+            printf ' %s' "$1"
+            shift
+        done
+        printf '\n'
+    } >>"$log_path"
+}
+
+mock_maybe_fail() {
+    command_name="$1"
+    normalized=$(mock_normalize "$command_name")
+    fail_var="MOCK_FAIL_${normalized}"
+    fail_flag=$(mock_get_env "$fail_var")
+    if [ -n "$fail_flag" ]; then
+        message=$(mock_get_env "${fail_var}_MESSAGE")
+        if [ -n "$message" ]; then
+            printf '%s\n' "$message" >&2
+        fi
+        exit_var="${fail_var}_EXIT_CODE"
+        exit_code=$(mock_get_env "$exit_var")
+        if [ -z "$exit_code" ]; then
+            exit_code=1
+        fi
+        exit "$exit_code"
+    fi
+}
+
+mock_dispatch_handler() {
+    command_name="$1"
+    shift
+    handler_dir="${MOCK_COMMAND_HANDLER_DIR-}"
+    if [ -n "$handler_dir" ] && [ -x "$handler_dir/$command_name" ]; then
+        exec "$handler_dir/$command_name" "$@"
+    fi
+}
+
+mock_run_default() {
+    command_name="$1"
+    shift
+    mock_log_command "$command_name" "$@"
+    mock_maybe_fail "$command_name"
+    mock_dispatch_handler "$command_name" "$@"
+}

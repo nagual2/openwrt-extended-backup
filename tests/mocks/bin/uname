@@ -1,0 +1,21 @@
+#!/bin/sh
+set -eu
+
+SCRIPT_DIR=$(dirname "$0")
+# shellcheck source=/dev/null
+. "$SCRIPT_DIR/_mock"
+
+command_name='uname'
+mock_run_default "$command_name" "$@"
+
+if [ "$#" -gt 0 ] && [ "$1" = '-n' ]; then
+    if [ -n "${MOCK_UNAME_N_VALUE-}" ]; then
+        printf '%s\n' "$MOCK_UNAME_N_VALUE"
+    else
+        printf 'mock-uname\n'
+    fi
+    exit 0
+fi
+
+/usr/bin/uname "$@"
+exit $?

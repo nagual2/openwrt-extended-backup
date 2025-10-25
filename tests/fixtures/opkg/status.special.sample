@@ -1,0 +1,31 @@
+Package: adblock
+Version: 5.0
+Status: install user installed
+Architecture: all
+Installed-Time: 1700000001
+
+Package: libfoo+bar
+Version: 1.2.3
+Status: install user installed
+Installed-Time: 1700000002
+
+Package: luci-i18n-firewall-ru
+Version: 1.0
+Status: install user installed
+Installed-Time: 1700000003
+
+Package: hello-world@pkg
+Version: 0.1
+Status: install user installed
+Installed-Time: 1700000005
+
+Package: kernel
+Version: 6.1
+Status: install ok installed
+Installed-Time: 1700000000
+
+Package: netdata-plugin
+Version: 1.0
+Status: install ok installed
+Auto-Installed: yes
+Installed-Time: 1700000004
