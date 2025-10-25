@@ -1,0 +1,5 @@
+2024-01-02 03:04:05 INFO Создание архива: ${TMP_OUT_DIR}/fullbackup_router-host_2024-01-02_03-04-05.tar.gz
+2024-01-02 03:04:05 INFO Архив сохранён: ${TMP_OUT_DIR}/fullbackup_router-host_2024-01-02_03-04-05.tar.gz
+2024-01-02 03:04:05 INFO Размер архива: 0
+2024-01-02 03:04:05 INFO Обновление пользователя SMB: owrt_backup
+ksmbd.adduser: simulated failure

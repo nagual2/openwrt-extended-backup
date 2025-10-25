@@ -152,6 +152,27 @@ else
     rm -f "$UNQUOTED_REPORT"
 fi
 
+BATS_STATUS=0
+BATS_SAMPLE=''
+if command -v bats >/dev/null 2>&1; then
+    if [ -d "$REPO_ROOT/tests" ]; then
+        BATS_SAMPLE=$(find "$REPO_ROOT/tests" -name '*.bats' -print -quit 2>/dev/null || printf '')
+        if [ -n "$BATS_SAMPLE" ]; then
+            printf '\nRunning bats tests...\n'
+            if ! BATS_LIB_PATH="$REPO_ROOT/tests/lib" bats --print-output-on-failure --timing "$REPO_ROOT/tests"; then
+                BATS_STATUS=$?
+            fi
+        fi
+    fi
+else
+    if [ -d "$REPO_ROOT/tests" ]; then
+        BATS_SAMPLE=$(find "$REPO_ROOT/tests" -name '*.bats' -print -quit 2>/dev/null || printf '')
+        if [ -n "$BATS_SAMPLE" ]; then
+            printf 'bats command not found; skipping bats tests.\n' >&2
+        fi
+    fi
+fi
+
 if [ "$SHEBANG_ERRORS" -ne 0 ] && [ -f "$SHEBANG_REPORT" ]; then
     printf '\nShebang violations detected:\n' >&2
     cat "$SHEBANG_REPORT" >&2
@@ -179,7 +200,7 @@ fi
 
 EXIT_STATUS=0
 if [ "$SHEBANG_ERRORS" -ne 0 ] || [ "$EVAL_ERRORS" -ne 0 ] || [ "$SHFMT_STATUS" -ne 0 ] ||
-    [ "$SHELLCHECK_STATUS" -ne 0 ] || [ "$UNQUOTED_ERRORS" -ne 0 ]; then
+    [ "$SHELLCHECK_STATUS" -ne 0 ] || [ "$UNQUOTED_ERRORS" -ne 0 ] || [ "$BATS_STATUS" -ne 0 ]; then
     EXIT_STATUS=1
 fi
 

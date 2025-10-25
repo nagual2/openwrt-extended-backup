@@ -1,0 +1,8 @@
+# user-installed opkg packages (3)
+# main packages (3)
+libfoo+bar
+node-exporter
+syslog-ng
+
+opkg update
+opkg install libfoo+bar node-exporter syslog-ng

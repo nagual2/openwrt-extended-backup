@@ -62,6 +62,7 @@ REMOVE_ARCHIVE_ON_FAILURE=0
 KSMBD_SHARE_NAME='owrt_archive'
 KSMBD_USER='owrt_backup'
 KSMBD_PASSWORD=''
+KSMBD_INIT_SCRIPT=${KSMBD_INIT_SCRIPT:-/etc/init.d/ksmbd}
 KSMBD_SHARE_CREATED=0
 KSMBD_SHARE_EXISTED=0
 
@@ -157,8 +158,8 @@ remove_smb_share() {
     if [ -n "$idx" ]; then
         uci delete "ksmbd.@share[$idx]" >/dev/null 2>&1 || true
         uci commit ksmbd >/dev/null 2>&1 || true
-        if [ -x /etc/init.d/ksmbd ]; then
-            /etc/init.d/ksmbd restart >/dev/null 2>&1 || true
+        if [ -x "$KSMBD_INIT_SCRIPT" ]; then
+            "$KSMBD_INIT_SCRIPT" restart >/dev/null 2>&1 || true
         fi
     fi
 }
@@ -362,8 +363,8 @@ create_archive() {
 ensure_ksmbd_dependencies() {
     require_command ksmbd.adduser
     require_command uci
-    if [ ! -x /etc/init.d/ksmbd ]; then
-        fatal 'Служба ksmbd недоступна (нет /etc/init.d/ksmbd)' "$EX_UNAVAILABLE"
+    if [ ! -x "$KSMBD_INIT_SCRIPT" ]; then
+        fatal "Служба ksmbd недоступна (нет $KSMBD_INIT_SCRIPT)" "$EX_UNAVAILABLE"
     fi
 
     if command -v ksmbd.status >/dev/null 2>&1; then
@@ -417,7 +418,7 @@ setup_smb_export() {
 
     KSMBD_SHARE_CREATED=1
 
-    if ! /etc/init.d/ksmbd restart >/dev/null 2>&1; then
+    if ! "$KSMBD_INIT_SCRIPT" restart >/dev/null 2>&1; then
         fatal 'Не удалось перезапустить службу ksmbd' "$EX_SOFTWARE"
     fi
 
