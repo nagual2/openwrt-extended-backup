@@ -59,6 +59,23 @@ ARCHIVE_FILENAME=''
 ARCHIVE_PATH=''
 REMOVE_ARCHIVE_ON_FAILURE=0
 
+DRY_RUN_VALUE=${DRY_RUN-}
+DRY_RUN=0
+if [ -n "$DRY_RUN_VALUE" ]; then
+    case "$(printf '%s' "$DRY_RUN_VALUE" | tr '[:upper:]' '[:lower:]')" in
+        1 | true | yes | on)
+            DRY_RUN=1
+            ;;
+        0 | false | no | off)
+            DRY_RUN=0
+            ;;
+        *)
+            DRY_RUN=1
+            ;;
+    esac
+fi
+unset DRY_RUN_VALUE
+
 KSMBD_SHARE_NAME='owrt_archive'
 KSMBD_USER='owrt_backup'
 KSMBD_PASSWORD=''
@@ -115,6 +132,8 @@ usage() {
       --ssh-port PORT     Порт SSH (по умолчанию 22)
       --ssh-user USER     Пользователь SSH (по умолчанию root)
       --out-dir PATH      Каталог для архива (по умолчанию /tmp)
+      --output PATH       Каталог для архива и временных файлов
+  -n, --dry-run           Показать действия без побочных эффектов
   -q, --quiet             Режим тихого вывода (только ошибки)
   -v                      Расширенный вывод (можно указать дважды)
   -h, --help              Показать эту справку и выйти
@@ -229,6 +248,16 @@ parse_args() {
                 shift || fatal 'Опция --out-dir требует аргумент' "$EX_USAGE"
                 OUT_DIR=$1
                 ;;
+            --output=*)
+                OUT_DIR=${1#--output=}
+                ;;
+            --output)
+                shift || fatal 'Опция --output требует аргумент' "$EX_USAGE"
+                OUT_DIR=$1
+                ;;
+            -n | --dry-run)
+                DRY_RUN=1
+                ;;
             -v)
                 if [ "$LOG_LEVEL" -lt 2 ]; then
                     LOG_LEVEL=$((LOG_LEVEL + 1))
@@ -306,12 +335,28 @@ prepare_environment() {
     require_command tar
     require_command date
 
-    if [ "$EXPORT_MODE" = 'scp' ]; then
-        log_debug 'Режим экспорта: SCP'
-    elif [ "$EXPORT_MODE" = 'smb' ]; then
-        log_debug 'Режим экспорта: SMB'
-    else
-        log_debug 'Режим экспорта: local'
+    case "$EXPORT_MODE" in
+        scp)
+            log_debug 'Режим экспорта: SCP'
+            ;;
+        smb)
+            log_debug 'Режим экспорта: SMB'
+            ;;
+        *)
+            log_debug 'Режим экспорта: local'
+            ;;
+    esac
+
+    if [ "$DRY_RUN" -eq 1 ]; then
+        if [ -d "$OUT_DIR" ]; then
+            if [ ! -w "$OUT_DIR" ]; then
+                fatal "Каталог недоступен для записи: $OUT_DIR" "$EX_SOFTWARE"
+            fi
+            log_info "Режим dry-run: используется существующий каталог $OUT_DIR"
+        else
+            log_info "Режим dry-run: будет создан каталог $OUT_DIR"
+        fi
+        return
     fi
 
     if ! mkdir -p "$OUT_DIR"; then
@@ -334,6 +379,12 @@ create_archive() {
     fi
 
     log_info "Создание архива: $ARCHIVE_PATH"
+
+    if [ "$DRY_RUN" -eq 1 ]; then
+        log_info 'Режим dry-run: архив не создавался'
+        return
+    fi
+
     REMOVE_ARCHIVE_ON_FAILURE=1
 
     if ! tar -czpf "$ARCHIVE_PATH" \
@@ -387,6 +438,23 @@ setup_smb_export() {
 
     if [ -z "$KSMBD_PASSWORD" ]; then
         KSMBD_PASSWORD=$(generate_password)
+    fi
+
+    if [ "$DRY_RUN" -eq 1 ]; then
+        log_info "Режим dry-run: пользователь SMB $KSMBD_USER не создавался"
+        log_info 'Режим dry-run: настройки ksmbd не изменялись'
+        log_info "Режим dry-run: шара $KSMBD_SHARE_NAME будет настроена на $OUT_DIR"
+        host=$(get_hostname)
+        ip=$(get_primary_ip)
+
+        if [ -n "$ip" ]; then
+            log_info "SMB-шара будет доступна по адресу \\\\$ip\\\\$KSMBD_SHARE_NAME"
+        fi
+        log_info "SMB-шара будет доступна по имени \\\\$host\\\\$KSMBD_SHARE_NAME"
+        log_info "Имя пользователя: $KSMBD_USER"
+        log_info "Пароль: $KSMBD_PASSWORD"
+        log_info 'Режим dry-run: перезапуск службы ksmbd пропущен'
+        return
     fi
 
     log_info "Обновление пользователя SMB: $KSMBD_USER"
@@ -488,6 +556,10 @@ emit_scp_instruction() {
 }
 
 parse_args "$@"
+
+if [ "$DRY_RUN" -eq 1 ]; then
+    log_info 'Режим dry-run: действия выполняются без побочных эффектов'
+fi
 
 prepare_environment
 create_archive
