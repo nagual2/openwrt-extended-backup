@@ -1,0 +1,11 @@
+#!/bin/sh
+set -eu
+
+SCRIPT_DIR=$(dirname "$0")
+# shellcheck source=/dev/null
+. "$SCRIPT_DIR/_mock"
+
+command_name='logger'
+mock_run_default "$command_name" "$@"
+
+exit 0

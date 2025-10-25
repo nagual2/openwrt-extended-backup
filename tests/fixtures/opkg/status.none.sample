@@ -1,0 +1,15 @@
+Package: busybox
+Version: 1.36.1
+Status: install ok installed
+Installed-Time: 1700000000
+
+Package: base-files
+Version: 23.05
+Status: install ok installed
+Installed-Time: 1700000000
+
+Package: dnsmasq
+Version: 2.89
+Status: install ok installed
+Auto-Installed: yes
+Installed-Time: 1700000000

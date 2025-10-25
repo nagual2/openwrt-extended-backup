@@ -1,0 +1,15 @@
+#!/bin/sh
+set -eu
+
+SCRIPT_DIR=$(dirname "$0")
+# shellcheck source=/dev/null
+. "$SCRIPT_DIR/_mock"
+
+command_name='ip'
+mock_run_default "$command_name" "$@"
+
+if [ -n "${MOCK_IP_OUTPUT-}" ]; then
+    printf '%s\n' "$MOCK_IP_OUTPUT"
+fi
+
+exit "${MOCK_IP_EXIT_CODE-1}"

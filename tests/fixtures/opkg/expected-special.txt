@@ -1,0 +1,13 @@
+# user-installed opkg packages (5)
+# main packages (4)
+adblock
+custom-tool
+hello-world@pkg
+libfoo+bar
+
+# LuCI translations (1)
+luci-i18n-firewall-ru
+
+opkg update
+opkg install adblock custom-tool hello-world@pkg libfoo+bar
+opkg install luci-i18n-firewall-ru
