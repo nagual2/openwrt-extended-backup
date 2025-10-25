@@ -9,8 +9,8 @@ The following branch protection settings have been configured for the `main` bra
   - Require code owner reviews: No
 
 - **Required status checks**: ✅ Configured
-  - Shell quality checks required
-  - CI workflows must pass
+  - CI workflow required (`CI / Lint and test`)
+  - All CI checks must pass
 
 - **Branch restrictions**: ✅ Configured
   - Force pushes: Disabled
@@ -22,9 +22,9 @@ The following branch protection settings have been configured for the `main` bra
 
 ## CI Requirements:
 The following CI checks are required before merging:
-- **shell-quality** workflow: Must pass
-- All shell scripts must pass linting (shellcheck, shfmt)
-- Code quality standards must be met
+- **ci** workflow (`CI / Lint and test` job): Must pass
+- Shell scripts must pass linting (ShellCheck, shfmt)
+- Automated tests must succeed (Bats)
 
 ## Branch Naming Convention:
 - Feature branches: `feat/feature-name`
