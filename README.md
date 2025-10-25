@@ -124,6 +124,8 @@ make install          # установит пакет через opkg, если 
 | `user_installed_packages` | `-V`, `--version` | Выводит текущую версию утилиты и завершает выполнение. |
 | `user_installed_packages` | `--status-file PATH` | Использует альтернативный `opkg` статус-файл (например, для тестов). |
 | `user_installed_packages` | `--user-installed-file PATH` | Добавляет пакеты из произвольного списка (по одному имени на строку). |
+| `user_installed_packages` | `--output PATH` | Записывает результат в указанный файл вместо stdout. |
+| `user_installed_packages` | `--format {opkg,plain}` | Выбирает формат вывода: стандартный `opkg` (по умолчанию) или простой список `plain`. |
 | `user_installed_packages` | `-x`, `--exclude PATTERN` | Исключает пакеты по шаблону (аргумент можно повторять). |
 | `user_installed_packages` | `--include-auto-deps` | Включает зависимости, помеченные `Auto-Installed: yes`. |
 | `user_installed_packages` | без аргументов | Анализирует текущую систему и выводит отсортированные команды `opkg update` и `opkg install …`. |

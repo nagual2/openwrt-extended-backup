@@ -50,6 +50,8 @@ STATUS_FILE=$DEFAULT_STATUS_FILE
 USER_INSTALLED_FILE=''
 INCLUDE_AUTO_DEPS=0
 EXCLUDE_PATTERNS=''
+OUTPUT_FILE=''
+OUTPUT_FORMAT='opkg'
 
 show_version() {
     printf '%s version %s\n' "$PROGRAM" "$VERSION"
@@ -62,6 +64,8 @@ usage() {
 Опции:
       --status-file PATH         Использовать альтернативный status-файл opkg (по умолчанию $DEFAULT_STATUS_FILE)
       --user-installed-file PATH Добавить пакеты из произвольного списка (по одному имени на строку)
+      --output PATH              Записать результат в указанный файл вместо stdout
+      --format {opkg,plain}      Выбрать формат вывода (opkg или plain; по умолчанию opkg)
   -x, --exclude PATTERN          Исключить пакеты по шаблону (опцию можно указать несколько раз)
       --include-auto-deps        Включить зависимости с Auto-Installed: yes
   -h, --help                     Показать эту справку и выйти
@@ -89,6 +93,18 @@ append_exclude_pattern() {
     fi
 }
 
+set_output_format() {
+    value=$1
+    case "$value" in
+        opkg | plain)
+            OUTPUT_FORMAT=$value
+            ;;
+        *)
+            fatal 'Опция --format поддерживает только значения opkg или plain' "$EX_USAGE"
+            ;;
+    esac
+}
+
 should_exclude() {
     pkg=$1
     if [ -z "$EXCLUDE_PATTERNS" ]; then
@@ -112,6 +128,42 @@ should_exclude() {
     done
     IFS=$old_ifs
     return 1
+}
+
+emit_output() {
+    case "$OUTPUT_FORMAT" in
+        opkg)
+            printf '# user-installed opkg packages (%d)\n' "$TOTAL_COUNT"
+            printf '# main packages (%d)\n' "$MAIN_COUNT"
+            if [ "$MAIN_COUNT" -gt 0 ]; then
+                printf '%s\n' "$MAIN_LINES"
+            fi
+            printf '\n'
+            if [ "$LUCI_COUNT" -gt 0 ]; then
+                printf '# LuCI translations (%d)\n' "$LUCI_COUNT"
+                printf '%s\n' "$LUCI_LINES"
+                printf '\n'
+            fi
+            printf 'opkg update\n'
+            if [ "$MAIN_COUNT" -gt 0 ]; then
+                printf 'opkg install %s\n' "$MAIN_ARGS"
+            fi
+            if [ "$LUCI_COUNT" -gt 0 ]; then
+                printf 'opkg install %s\n' "$LUCI_ARGS"
+            fi
+            ;;
+        plain)
+            if [ "$MAIN_COUNT" -gt 0 ]; then
+                printf '%s\n' "$MAIN_LINES"
+            fi
+            if [ "$LUCI_COUNT" -gt 0 ]; then
+                printf '%s\n' "$LUCI_LINES"
+            fi
+            ;;
+        *)
+            fatal "Неизвестный формат вывода: $OUTPUT_FORMAT" "$EX_SOFTWARE"
+            ;;
+    esac
 }
 
 parse_args() {
@@ -144,6 +196,26 @@ parse_args() {
                 ;;
             --user-installed-file=*)
                 USER_INSTALLED_FILE=${1#--user-installed-file=}
+                ;;
+            --output)
+                if [ $# -lt 2 ]; then
+                    fatal 'Опция --output требует указать путь' "$EX_USAGE"
+                fi
+                OUTPUT_FILE=$2
+                shift
+                ;;
+            --output=*)
+                OUTPUT_FILE=${1#--output=}
+                ;;
+            --format)
+                if [ $# -lt 2 ]; then
+                    fatal 'Опция --format требует указать значение (opkg или plain)' "$EX_USAGE"
+                fi
+                set_output_format "$2"
+                shift
+                ;;
+            --format=*)
+                set_output_format "${1#--format=}"
                 ;;
             -x)
                 if [ $# -lt 2 ]; then
@@ -342,21 +414,10 @@ fi
 
 TOTAL_COUNT=$((MAIN_COUNT + LUCI_COUNT))
 
-printf '# user-installed opkg packages (%d)\n' "$TOTAL_COUNT"
-printf '# main packages (%d)\n' "$MAIN_COUNT"
-if [ "$MAIN_COUNT" -gt 0 ]; then
-    printf '%s\n' "$MAIN_LINES"
-fi
-printf '\n'
-if [ "$LUCI_COUNT" -gt 0 ]; then
-    printf '# LuCI translations (%d)\n' "$LUCI_COUNT"
-    printf '%s\n' "$LUCI_LINES"
-    printf '\n'
-fi
-printf 'opkg update\n'
-if [ "$MAIN_COUNT" -gt 0 ]; then
-    printf 'opkg install %s\n' "$MAIN_ARGS"
-fi
-if [ "$LUCI_COUNT" -gt 0 ]; then
-    printf 'opkg install %s\n' "$LUCI_ARGS"
+if [ -n "$OUTPUT_FILE" ] && [ "$OUTPUT_FILE" != '-' ]; then
+    if ! emit_output >"$OUTPUT_FILE"; then
+        fatal "Не удалось записать результат в файл: $OUTPUT_FILE" "$EX_UNAVAILABLE"
+    fi
+else
+    emit_output
 fi
