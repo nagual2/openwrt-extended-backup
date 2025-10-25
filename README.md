@@ -131,7 +131,14 @@ make install          # установит пакет через opkg, если 
 ## Версионирование и релизы
 - Текущая версия хранится в файле `VERSION` в корне репозитория.
 - Оба скрипта поддерживают флаги `-V`/`--version` для быстрого вывода версии без запуска основной логики.
-- Workflow [`Release`](.github/workflows/release.yml) использует [release-please](https://github.com/googleapis/release-please) для формирования GitHub Releases, обновления `CHANGELOG.md` и автоматической публикации архивов со скриптами.
+- Workflow [`.github/workflows/release.yml`](.github/workflows/release.yml) запускается при пуше тега формата `v*`, собирает архивы `openwrt-extended-backup-${VERSION}.tar.gz` и `.zip`, формирует `SHA256SUMS` и публикует GitHub Release с текстом из соответствующего раздела `CHANGELOG.md`.
+- Чтобы подготовить новый релиз вручную (пример для `v0.1.0`):
+  1. Обновите `VERSION`: `printf '0.1.0\n' > VERSION`.
+  2. Добавьте или обновите секцию `## [0.1.0]` в `CHANGELOG.md` с описанием изменений.
+  3. Зафиксируйте изменения: `git commit -am "chore: prepare release 0.1.0"`.
+  4. Создайте аннотированный тег: `git tag -a v0.1.0 -m "v0.1.0"`.
+  5. Отправьте изменения и тег: `git push origin main && git push origin v0.1.0`.
+  6. Дождитесь выполнения GitHub Actions — релиз появится автоматически в разделе Releases вместе с архивами и файлом `SHA256SUMS`.
 
 ## Примеры
 ### SCP по умолчанию

@@ -1,63 +1,134 @@
-name: Release
+name: Tagged Release
 
 on:
   push:
-    branches:
-      - main
-  workflow_dispatch:
-
-concurrency:
-  group: release-${{ github.ref == 'refs/heads/main' && 'main' || github.run_id }}
-  cancel-in-progress: ${{ github.ref == 'refs/heads/main' }}
+    tags:
+      - 'v*'
 
 permissions:
   contents: write
-  pull-requests: write
 
 jobs:
   release:
     runs-on: ubuntu-latest
 
     steps:
-      - id: release
-        uses: google-github-actions/release-please-action@e4dc86ba9405554aeba3c6bb2d169500e7d3b4ee # v4
-        with:
-          config-file: release-please-config.json
-          manifest-file: .release-please-manifest.json
-
-      - name: Checkout repository
-        if: steps.release.outputs.release_created == 'true'
+      - name: Check out repository
         uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332 # v4.1.7
         with:
           fetch-depth: 0
-          ref: ${{ steps.release.outputs.tag_name }}
+          ref: ${{ github.ref }}
 
-      - name: Install packaging tools
-        if: steps.release.outputs.release_created == 'true'
+      - name: Prepare metadata
+        id: prep
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG="${GITHUB_REF#refs/tags/}"
+          if [[ -z "${TAG}" ]]; then
+            echo "GITHUB_REF must point to a tag." >&2
+            exit 1
+          fi
+          if [[ ! "${TAG}" =~ ^v[0-9]+(\.[0-9]+)*$ ]]; then
+            echo "Unsupported tag format '${TAG}'. Expected v<major.minor.patch>." >&2
+            exit 1
+          fi
+          VERSION="${TAG#v}"
+          if [[ ! -f VERSION ]]; then
+            echo "VERSION file is missing." >&2
+            exit 1
+          fi
+          FILE_VERSION="$(tr -d '\n\r ' < VERSION)"
+          if [[ "${FILE_VERSION}" != "${VERSION}" ]]; then
+            echo "VERSION file (${FILE_VERSION}) does not match tag version (${VERSION})." >&2
+            exit 1
+          fi
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+
+      - name: Install packaging dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends zip
 
-      - name: Prepare release artifacts
-        if: steps.release.outputs.release_created == 'true'
+      - name: Build release artifacts
+        id: artifacts
         shell: bash
         run: |
           set -euo pipefail
-          TAG_NAME="${{ steps.release.outputs.tag_name }}"
-          WORKDIR="openwrt-toolkit-${TAG_NAME}"
-          mkdir -p "dist/${WORKDIR}/scripts"
-          cp CHANGELOG.md README.md VERSION openwrt_full_backup user_installed_packages "dist/${WORKDIR}/"
-          cp scripts/openwrt_full_backup scripts/user_installed_packages "dist/${WORKDIR}/scripts/"
-          tar -czf "dist/${WORKDIR}.tar.gz" -C dist "${WORKDIR}"
-          (cd dist && zip -9 -r "${WORKDIR}.zip" "${WORKDIR}")
+          VERSION="${{ steps.prep.outputs.version }}"
+          ARCHIVE_NAME="openwrt-extended-backup-${VERSION}"
+          mkdir -p "dist/${ARCHIVE_NAME}/scripts"
+          ROOT_SCRIPTS=(openwrt_full_backup openwrt_full_restore user_installed_packages)
+          for script in "${ROOT_SCRIPTS[@]}"; do
+            if [[ ! -f "${script}" ]]; then
+              echo "Missing root-level script: ${script}" >&2
+              exit 1
+            fi
+            cp "${script}" "dist/${ARCHIVE_NAME}/"
+            if [[ ! -f "scripts/${script}" ]]; then
+              echo "Missing scripts/${script}" >&2
+              exit 1
+            fi
+            cp "scripts/${script}" "dist/${ARCHIVE_NAME}/scripts/"
+          done
+          DOCS=(README.md CHANGELOG.md)
+          for doc in "${DOCS[@]}"; do
+            if [[ ! -f "${doc}" ]]; then
+              echo "Missing documentation file: ${doc}" >&2
+              exit 1
+            fi
+            cp "${doc}" "dist/${ARCHIVE_NAME}/"
+          done
+          if [[ -f LICENSE ]]; then
+            cp LICENSE "dist/${ARCHIVE_NAME}/"
+          fi
+          tar -C dist -czf "dist/${ARCHIVE_NAME}.tar.gz" "${ARCHIVE_NAME}"
+          (cd dist && zip -9 -r "${ARCHIVE_NAME}.zip" "${ARCHIVE_NAME}")
+          (cd dist && sha256sum "${ARCHIVE_NAME}.tar.gz" "${ARCHIVE_NAME}.zip" > SHA256SUMS)
+          echo "archive_name=${ARCHIVE_NAME}" >> "$GITHUB_OUTPUT"
 
-      - name: Upload release assets
-        if: steps.release.outputs.release_created == 'true'
+      - name: Extract changelog entry
+        id: changelog
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="${{ steps.prep.outputs.version }}"
+          mkdir -p dist
+          OUTPUT="dist/RELEASE_BODY.md"
+          awk -v ver="${VERSION}" '
+            BEGIN {
+              header_pattern = "^## \\[" ver "\\]"
+              section_pattern = "^## "
+              printing = 0
+              printed_header = 0
+            }
+            $0 ~ header_pattern {
+              printing = 1
+            }
+            printing {
+              if ($0 ~ section_pattern && $0 !~ header_pattern && printed_header) {
+                exit
+              }
+              print $0
+              printed_header = 1
+            }
+          ' CHANGELOG.md > "${OUTPUT}"
+          if [[ ! -s "${OUTPUT}" ]]; then
+            echo "No changelog entry found for version ${VERSION}." >&2
+            exit 1
+          fi
+          echo "body_path=${OUTPUT}" >> "$GITHUB_OUTPUT"
+
+      - name: Publish GitHub release
         uses: softprops/action-gh-release@6da8fa9354ddfdc4aeace5fc48d7f679b5214090 # v2
         with:
-          tag_name: ${{ steps.release.outputs.tag_name }}
+          tag_name: ${{ steps.prep.outputs.tag }}
+          name: ${{ steps.prep.outputs.tag }}
+          body_path: ${{ steps.changelog.outputs.body_path }}
           files: |
-            dist/openwrt-toolkit-${{ steps.release.outputs.tag_name }}.tar.gz
-            dist/openwrt-toolkit-${{ steps.release.outputs.tag_name }}.zip
+            dist/${{ steps.artifacts.outputs.archive_name }}.tar.gz
+            dist/${{ steps.artifacts.outputs.archive_name }}.zip
+            dist/SHA256SUMS
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
