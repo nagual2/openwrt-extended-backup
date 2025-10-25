@@ -1,0 +1,537 @@
+#!/bin/sh
+# shellcheck shell=sh
+
+set -eu
+
+PROGRAM=$(basename "$0")
+SCRIPT_PATH=$0
+
+case "$SCRIPT_PATH" in
+    */*)
+        SCRIPT_SOURCE=$(dirname "$SCRIPT_PATH")
+        ;;
+    *)
+        LOOKUP=$(command -v -- "$SCRIPT_PATH" 2>/dev/null || printf '')
+        if [ -n "$LOOKUP" ]; then
+            SCRIPT_SOURCE=$(dirname "$LOOKUP")
+        else
+            SCRIPT_SOURCE='.'
+        fi
+        ;;
+esac
+
+if ! SCRIPT_DIR=$(cd "$SCRIPT_SOURCE" 2>/dev/null && pwd); then
+    printf '%s: не удалось определить каталог скрипта\n' "$PROGRAM" >&2
+    exit 1
+fi
+PROJECT_ROOT=$(dirname "$SCRIPT_DIR")
+VERSION_FILE="${PROJECT_ROOT}/VERSION"
+SHARE_VERSION_FILE='/usr/share/openwrt-extended-backup/VERSION'
+VERSION_FALLBACK='0.4.1'
+
+if [ -r "$VERSION_FILE" ]; then
+    VERSION=$(head -n 1 "$VERSION_FILE")
+elif [ -r "$SHARE_VERSION_FILE" ]; then
+    VERSION=$(head -n 1 "$SHARE_VERSION_FILE")
+fi
+
+if [ -z "${VERSION-}" ]; then
+    VERSION=$VERSION_FALLBACK
+fi
+
+EX_OK=0
+EX_USAGE=64
+EX_DATAERR=65
+EX_UNAVAILABLE=69
+EX_SOFTWARE=70
+
+ARCHIVE_PATH=''
+PACKAGES_ARG=''
+DRY_RUN=0
+NO_REBOOT=0
+FORCE=0
+OVERLAY_PATH='/overlay'
+
+TMPDIR=${TMPDIR:-/tmp}
+TMP_WORKDIR=''
+EXTRACTED_OVERLAY=''
+SNAPSHOT_PATH=''
+COPY_ARCHIVE=''
+AUTO_PACKAGES_FILE=''
+STOPPED_SERVICES=''
+
+NON_ESSENTIAL_SERVICES='uhttpd rpcd dnsmasq firewall dropbear'
+
+timestamp() {
+    date '+%Y-%m-%d %H:%M:%S'
+}
+
+log_msg() {
+    level=$1
+    shift
+    if [ "$#" -gt 0 ]; then
+        printf '%s %-5s %s\n' "$(timestamp)" "$level" "$*" >&2
+    else
+        printf '%s %-5s\n' "$(timestamp)" "$level" >&2
+    fi
+}
+
+log_info() {
+    log_msg 'INFO' "$@"
+}
+
+log_warn() {
+    log_msg 'WARN' "$@"
+}
+
+log_error() {
+    log_msg 'ERROR' "$@"
+}
+
+fatal() {
+    message=$1
+    code=${2:-$EX_SOFTWARE}
+    log_error "$message"
+    exit "$code"
+}
+
+show_version() {
+    printf '%s version %s\n' "$PROGRAM" "$VERSION"
+}
+
+usage() {
+    cat <<'EOF'
+Использование: openwrt_restore [ОПЦИИ]
+
+Опции:
+      --archive PATH       Путь к архиву резервной копии (.tar.gz)
+      --packages PATH      Скрипт с командами переустановки пакетов
+      --dry-run            Проверить архив и подготовить действия без изменений
+      --no-reboot          Не перезагружать устройство по завершении
+      --overlay PATH       Альтернативный путь к overlay (для тестирования)
+      --force              Пропустить защитные проверки окружения
+  -h, --help               Показать эту справку и выйти
+  -V, --version            Показать версию и выйти
+EOF
+}
+
+to_absolute_path() {
+    case "$1" in
+        /*)
+            printf '%s\n' "$1"
+            ;;
+        *)
+            printf '%s/%s\n' "$(pwd)" "$1"
+            ;;
+    esac
+}
+
+require_command() {
+    if ! command -v "$1" >/dev/null 2>&1; then
+        fatal "Требуемая утилита '$1' недоступна" "$EX_UNAVAILABLE"
+    fi
+}
+
+check_openwrt() {
+    if [ -r /etc/openwrt_release ]; then
+        return
+    fi
+    if [ "$FORCE" -eq 1 ]; then
+        log_warn 'Не найден /etc/openwrt_release — продолжаем из-за --force'
+        return
+    fi
+    fatal 'Скрипт рассчитан на OpenWrt: отсутствует /etc/openwrt_release' "$EX_UNAVAILABLE"
+}
+
+check_privileges() {
+    if [ "$DRY_RUN" -eq 1 ]; then
+        return
+    fi
+    if command -v id >/dev/null 2>&1; then
+        if [ "$(id -u)" -ne 0 ]; then
+            if [ "$FORCE" -eq 1 ] || [ "$OVERLAY_PATH" != '/overlay' ]; then
+                log_warn 'Скрипт запущен не от root — убедитесь, что есть права на запись в overlay'
+                return
+            fi
+            fatal 'Для восстановления требуется запуск от root' "$EX_UNAVAILABLE"
+        fi
+    fi
+}
+
+verify_archive() {
+    log_info "Проверка архива: $ARCHIVE_PATH"
+    if ! tar -tzf "$ARCHIVE_PATH" >/dev/null 2>&1; then
+        fatal 'tar не смог прочитать архив (возможно повреждён)' "$EX_DATAERR"
+    fi
+}
+
+maybe_verify_checksum() {
+    CHECKSUM_FILE=''
+    suffixes='.sha256 .sha256sum .sha256.txt'
+    for suffix in $suffixes; do
+        candidate=${ARCHIVE_PATH}${suffix}
+        if [ -r "$candidate" ]; then
+            CHECKSUM_FILE=$candidate
+            break
+        fi
+    done
+
+    if [ -z "$CHECKSUM_FILE" ]; then
+        log_info 'Контрольная сумма не найдена — проверка sha256 пропущена'
+        return
+    fi
+
+    if ! command -v sha256sum >/dev/null 2>&1; then
+        log_warn 'sha256sum недоступен — пропускаем проверку контрольной суммы'
+        return
+    fi
+
+    checksum_dir=$(dirname "$CHECKSUM_FILE")
+    checksum_file=$(basename "$CHECKSUM_FILE")
+    log_info "Проверка sha256 по файлу: $CHECKSUM_FILE"
+    if ! (cd "$checksum_dir" 2>/dev/null && sha256sum -c "$checksum_file" >/dev/null 2>&1); then
+        fatal 'Проверка sha256 завершилась ошибкой' "$EX_DATAERR"
+    fi
+}
+
+extract_archive() {
+    TMP_WORKDIR=$(mktemp -d "${TMPDIR%/}/openwrt-restore.XXXXXX")
+    if [ ! -d "$TMP_WORKDIR" ]; then
+        fatal 'Не удалось подготовить временный каталог для распаковки' "$EX_SOFTWARE"
+    fi
+
+    if ! tar -xzf "$ARCHIVE_PATH" -C "$TMP_WORKDIR" overlay; then
+        fatal 'Архив не содержит каталога overlay или повреждён' "$EX_DATAERR"
+    fi
+
+    EXTRACTED_OVERLAY="$TMP_WORKDIR/overlay"
+    if [ ! -d "$EXTRACTED_OVERLAY" ]; then
+        fatal 'После распаковки отсутствует каталог overlay' "$EX_DATAERR"
+    fi
+}
+
+create_snapshot() {
+    if [ "$DRY_RUN" -eq 1 ]; then
+        log_info 'Dry-run: снимок текущего overlay не создаётся'
+        return
+    fi
+
+    if [ ! -d "$OVERLAY_PATH" ]; then
+        log_warn "Каталог overlay отсутствует ($OVERLAY_PATH) — снимок пропущен"
+        return
+    fi
+
+    SNAPSHOT_DIR="${TMPDIR%/}/openwrt-restore-snapshots"
+    if ! mkdir -p "$SNAPSHOT_DIR"; then
+        fatal "Не удалось создать каталог для снимка: $SNAPSHOT_DIR" "$EX_SOFTWARE"
+    fi
+
+    SNAPSHOT_PATH="$SNAPSHOT_DIR/overlay-snapshot-$(date +'%Y%m%d-%H%M%S').tar.gz"
+    overlay_parent=$(dirname "$OVERLAY_PATH")
+    overlay_name=$(basename "$OVERLAY_PATH")
+
+    log_info "Создание резервного снимка overlay: $SNAPSHOT_PATH"
+    if ! tar -czpf "$SNAPSHOT_PATH" -C "$overlay_parent" "$overlay_name" >/dev/null 2>&1; then
+        fatal 'Не удалось создать резервный снимок overlay' "$EX_SOFTWARE"
+    fi
+}
+
+stop_services() {
+    if [ "$DRY_RUN" -eq 1 ]; then
+        log_info 'Dry-run: службы не останавливаются'
+        return
+    fi
+
+    for service in $NON_ESSENTIAL_SERVICES; do
+        init_script="/etc/init.d/$service"
+        if [ -x "$init_script" ]; then
+            if "$init_script" stop >/dev/null 2>&1; then
+                STOPPED_SERVICES="$STOPPED_SERVICES $service"
+                log_info "Остановлена служба: $service"
+            else
+                log_warn "Не удалось остановить службу: $service"
+            fi
+        fi
+    done
+}
+
+restart_services() {
+    if [ "$DRY_RUN" -eq 1 ]; then
+        return
+    fi
+
+    # Удаляем ведущие пробелы
+    case "$STOPPED_SERVICES" in
+        "")
+            return
+            ;;
+    esac
+
+    for service in $STOPPED_SERVICES; do
+        init_script="/etc/init.d/$service"
+        if [ -x "$init_script" ]; then
+            if "$init_script" start >/dev/null 2>&1; then
+                log_info "Запущена служба: $service"
+            else
+                log_warn "Не удалось запустить службу: $service"
+            fi
+        fi
+    done
+}
+
+apply_overlay() {
+    if [ "$DRY_RUN" -eq 1 ]; then
+        log_info 'Dry-run: файлы из архива не применяются'
+        return
+    fi
+
+    if [ -z "$EXTRACTED_OVERLAY" ] || [ ! -d "$EXTRACTED_OVERLAY" ]; then
+        fatal 'Распакованный каталог overlay недоступен' "$EX_SOFTWARE"
+    fi
+
+    if [ ! -d "$OVERLAY_PATH" ]; then
+        if ! mkdir -p "$OVERLAY_PATH"; then
+            fatal "Не удалось создать каталог overlay: $OVERLAY_PATH" "$EX_SOFTWARE"
+        fi
+    fi
+
+    COPY_ARCHIVE=$(mktemp "${TMPDIR%/}/openwrt-restore-copy.XXXXXX")
+
+    log_info "Применение файлов архива к $OVERLAY_PATH"
+    if ! tar -cpf "$COPY_ARCHIVE" -C "$EXTRACTED_OVERLAY" . >/dev/null 2>&1; then
+        fatal 'Не удалось подготовить данные для копирования' "$EX_SOFTWARE"
+    fi
+
+    if ! tar -xpf "$COPY_ARCHIVE" -C "$OVERLAY_PATH" >/dev/null 2>&1; then
+        fatal 'Не удалось применить архив к overlay' "$EX_SOFTWARE"
+    fi
+
+    rm -f "$COPY_ARCHIVE"
+    COPY_ARCHIVE=''
+
+    if command -v sync >/dev/null 2>&1; then
+        sync >/dev/null 2>&1 || true
+    fi
+
+    log_info 'Файлы overlay успешно применены'
+}
+
+run_package_reinstall() {
+    if [ "$DRY_RUN" -eq 1 ]; then
+        log_info 'Dry-run: переустановка пакетов пропущена'
+        return
+    fi
+
+    packages_path=''
+    auto_generated=0
+
+    if [ -n "$PACKAGES_ARG" ]; then
+        packages_path=$(to_absolute_path "$PACKAGES_ARG")
+    else
+        helper=$(command -v user_installed_packages 2>/dev/null || printf '')
+        if [ -z "$helper" ]; then
+            helper_candidate="${SCRIPT_DIR}/user_installed_packages"
+            if [ -x "$helper_candidate" ]; then
+                helper=$helper_candidate
+            fi
+        fi
+
+        if [ -z "$helper" ]; then
+            log_info 'Список пакетов не указан и user_installed_packages не найден — шаг пропущен'
+            return
+        fi
+
+        AUTO_PACKAGES_FILE=$(mktemp "${TMPDIR%/}/openwrt-restore-packages.XXXXXX")
+        packages_path=$AUTO_PACKAGES_FILE
+        log_info "Генерация списка пакетов через $helper"
+        if ! "$helper" >"$packages_path" 2>/dev/null; then
+            log_warn 'Не удалось сгенерировать список пакетов — шаг пропущен'
+            return
+        fi
+        auto_generated=1
+    fi
+
+    if [ ! -r "$packages_path" ]; then
+        log_warn "Файл пакетов недоступен: $packages_path"
+        return
+    fi
+
+    log_info "Переустановка пакетов из $packages_path"
+    if sh "$packages_path" >/dev/null 2>&1; then
+        log_info 'Переустановка пакетов завершена'
+    else
+        fatal 'Скрипт переустановки пакетов завершился с ошибкой' "$EX_SOFTWARE"
+    fi
+
+    if [ "$auto_generated" -eq 1 ]; then
+        log_info "Временный файл с командами сохранён: $packages_path"
+        AUTO_PACKAGES_FILE=''
+    fi
+}
+
+maybe_reboot() {
+    if [ "$DRY_RUN" -eq 1 ]; then
+        log_info 'Dry-run: перезагрузка пропущена'
+        return
+    fi
+
+    if [ "$NO_REBOOT" -eq 1 ]; then
+        log_info 'Перезагрузка отключена флагом --no-reboot'
+        return
+    fi
+
+    if ! command -v reboot >/dev/null 2>&1; then
+        log_warn 'Команда reboot недоступна — перезагрузка пропущена'
+        return
+    fi
+
+    if [ "$FORCE" -eq 1 ]; then
+        log_info 'Перезагрузка выполняется (принудительно)'
+        reboot
+        return
+    fi
+
+    if [ -t 0 ]; then
+        printf 'Перезагрузить устройство сейчас? [y/N]: ' >&2
+        IFS= read -r answer || answer=''
+        case $answer in
+            [Yy]* )
+                log_info 'Перезагрузка'
+                reboot
+                return
+                ;;
+        esac
+    fi
+
+    log_info 'Перезагрузка не выполнена. Запустите reboot вручную при необходимости'
+}
+
+cleanup() {
+    status=$?
+    set +e
+
+    if [ -n "$COPY_ARCHIVE" ] && [ -f "$COPY_ARCHIVE" ]; then
+        rm -f "$COPY_ARCHIVE"
+    fi
+
+    if [ -n "$AUTO_PACKAGES_FILE" ] && [ -f "$AUTO_PACKAGES_FILE" ]; then
+        rm -f "$AUTO_PACKAGES_FILE"
+    fi
+
+    if [ -n "$TMP_WORKDIR" ] && [ -d "$TMP_WORKDIR" ]; then
+        rm -rf "$TMP_WORKDIR"
+    fi
+
+    restart_services
+
+    if [ "$status" -ne 0 ] && [ -n "$SNAPSHOT_PATH" ]; then
+        log_warn "Восстановление завершилось с ошибкой. Снимок сохранён: $SNAPSHOT_PATH"
+    fi
+
+    exit "$status"
+}
+
+trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
+
+parse_args() {
+    while [ "$#" -gt 0 ]; do
+        case "$1" in
+            --archive=*)
+                ARCHIVE_PATH=${1#--archive=}
+                ;;
+            --archive)
+                shift || fatal 'Опция --archive требует аргумент' "$EX_USAGE"
+                ARCHIVE_PATH=$1
+                ;;
+            --packages=*)
+                PACKAGES_ARG=${1#--packages=}
+                ;;
+            --packages)
+                shift || fatal 'Опция --packages требует аргумент' "$EX_USAGE"
+                PACKAGES_ARG=$1
+                ;;
+            --dry-run)
+                DRY_RUN=1
+                ;;
+            --no-reboot)
+                NO_REBOOT=1
+                ;;
+            --overlay=*)
+                OVERLAY_PATH=${1#--overlay=}
+                ;;
+            --overlay)
+                shift || fatal 'Опция --overlay требует аргумент' "$EX_USAGE"
+                OVERLAY_PATH=$1
+                ;;
+            --force)
+                FORCE=1
+                ;;
+            -h|--help)
+                usage
+                exit "$EX_OK"
+                ;;
+            -V|--version)
+                show_version
+                exit "$EX_OK"
+                ;;
+            --)
+                shift
+                break
+                ;;
+            -*)
+                fatal "Неизвестная опция: $1" "$EX_USAGE"
+                ;;
+            *)
+                if [ -z "$ARCHIVE_PATH" ]; then
+                    ARCHIVE_PATH=$1
+                else
+                    fatal "Неожиданный аргумент: $1" "$EX_USAGE"
+                fi
+                ;;
+        esac
+        shift
+    done
+
+    if [ "$#" -gt 0 ]; then
+        fatal "Неожиданный аргумент: $1" "$EX_USAGE"
+    fi
+}
+
+main() {
+    parse_args "$@"
+
+    if [ -z "$ARCHIVE_PATH" ]; then
+        fatal 'Не указан путь к архиву (--archive)' "$EX_USAGE"
+    fi
+
+    ARCHIVE_PATH=$(to_absolute_path "$ARCHIVE_PATH")
+    OVERLAY_PATH=$(to_absolute_path "$OVERLAY_PATH")
+
+    if [ ! -r "$ARCHIVE_PATH" ]; then
+        fatal "Архив недоступен для чтения: $ARCHIVE_PATH" "$EX_DATAERR"
+    fi
+
+    if [ "$OVERLAY_PATH" = '/' ]; then
+        fatal 'Неверный путь overlay: /' "$EX_USAGE"
+    fi
+
+    check_openwrt
+    check_privileges
+
+    require_command tar
+
+    verify_archive
+    maybe_verify_checksum
+    extract_archive
+    create_snapshot
+    stop_services
+    apply_overlay
+    run_package_reinstall
+    maybe_reboot
+
+    log_info 'Восстановление успешно завершено'
+}
+
+main "$@"

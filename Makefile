@@ -26,12 +26,13 @@ all: ipk
 
 ipk: $(IPK_PATH)
 
-$(IPK_PATH): scripts/openwrt_full_backup scripts/openwrt_full_restore scripts/user_installed_packages VERSION
+$(IPK_PATH): scripts/openwrt_full_backup scripts/openwrt_full_restore scripts/openwrt_restore scripts/user_installed_packages VERSION
 > rm -rf $(WORK_DIR)
 > mkdir -p $(DATA_DIR)/usr/sbin
 > mkdir -p $(DATA_DIR)/usr/share/$(PKG_NAME)
 > install -m 0755 scripts/openwrt_full_backup $(DATA_DIR)/usr/sbin/openwrt_full_backup
 > install -m 0755 scripts/openwrt_full_restore $(DATA_DIR)/usr/sbin/openwrt_full_restore
+> install -m 0755 scripts/openwrt_restore $(DATA_DIR)/usr/sbin/openwrt_restore
 > install -m 0755 scripts/user_installed_packages $(DATA_DIR)/usr/sbin/user_installed_packages
 > install -m 0644 VERSION $(DATA_DIR)/usr/share/$(PKG_NAME)/VERSION
 > mkdir -p $(CONTROL_DIR)

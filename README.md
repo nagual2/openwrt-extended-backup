@@ -2,7 +2,7 @@
 
 [![Shell quality checks](https://github.com/nagual2/openwrt-extended-backup/actions/workflows/shell-quality.yml/badge.svg?branch=main)](https://github.com/nagual2/openwrt-extended-backup/actions/workflows/shell-quality.yml)
 
-Набор shell-утилит, выполняющихся напрямую на маршрутизаторе под управлением OpenWrt. Основной сценарий `openwrt_full_backup` создаёт полную резервную копию пользовательского слоя (`/overlay`), сохраняет архив в выбранный каталог (по умолчанию `/tmp`) и выводит готовую команду `scp` для копирования. При необходимости скрипт умеет поднять временную SMB-шару через `ksmbd`. Комплементарная утилита `openwrt_full_restore` валидирует архив, безопасно восстанавливает файлы с предварительным резервным копированием текущего состояния, поддерживает dry-run и переустановку пакетов. Вспомогательный скрипт `user_installed_packages` выводит список вручную установленных пакетов для последующей переустановки.
+Набор shell-утилит, выполняющихся напрямую на маршрутизаторе под управлением OpenWrt. Основной сценарий `openwrt_full_backup` создаёт полную резервную копию пользовательского слоя (`/overlay`), сохраняет архив в выбранный каталог (по умолчанию `/tmp`) и выводит готовую команду `scp` для копирования. При необходимости скрипт умеет поднять временную SMB-шару через `ksmbd`. Комплементарная утилита `openwrt_restore` валидирует архив, при наличии проверяет контрольную сумму, создаёт резервный снимок текущего `/overlay`, безопасно применяет резервную копию, поддерживает dry-run, переустановку пакетов и опциональный reboot. Наследуемый сценарий `openwrt_full_restore` остаётся для совместимости. Вспомогательный скрипт `user_installed_packages` выводит список вручную установленных пакетов для последующей переустановки.
 
 Для политики ветвления и требований к PR см. [CONTRIBUTING.md](./CONTRIBUTING.md).
 
@@ -19,12 +19,14 @@
   - По умолчанию выводит команду `scp` для скачивания архива и поддерживает `--emit-scp-cmd` для интеграции в автоматизацию.
   - Управляется через флаг `--export` (`scp`, `local`, `smb`), а также предоставляет флаги `--ssh-host`, `--ssh-port`, `--ssh-user`, `--out-dir`, `--emit-scp-cmd`, `-q` и `-v` для настройки поведения.
   - При `--export=smb` настраивает временную SMB-шару (при наличии `ksmbd`) без автоматической установки пакетов.
+- `openwrt_restore`
+  - Проверяет архив (`tar -tzf`) и при наличии файла `*.sha256`/`*.sha256sum` сверяет контрольную сумму.
+  - Перед применением создаёт архив-снимок текущего `/overlay` в `TMPDIR`, умеет работать в режиме dry-run без изменений.
+  - Приостанавливает вспомогательные службы, аккуратно распаковывает резервную копию в указанный overlay (поддерживает `--overlay` для тестов) и выполняет `sync`.
+  - Переустанавливает пакеты из переданного скрипта или генерирует команды через `user_installed_packages`, при необходимости пропускает шаг.
+  - По завершении может инициировать перезагрузку (отключается `--no-reboot`).
 - `openwrt_full_restore`
-  - Валидирует архив (`tar -tzf`) и умеет работать в режиме dry-run без изменений на роутере.
-  - Перед распаковкой создаёт резервные копии перезаписываемых файлов в `/tmp/openwrt-restore-backup-*`.
-  - Распаковывает с сохранением атрибутов, восстанавливает права и владельцев, отслеживает новые и изменённые файлы.
-  - Предлагает запустить сохранённый список пакетов и перезапускает ключевые службы (network, wifi, firewall, dnsmasq, dropbear, sqm) при необходимости.
-  - Формирует итоговый отчёт со списком действий и путём до резервных копий.
+  - Сохранён для обратной совместимости: формирует подробный отчёт, создаёт резервные копии перезаписываемых файлов и предлагает перезапуск служб.
 - `user_installed_packages`
   - Генерирует детерминированный список и команды для переустановки вручную установленных `opkg`-пакетов с опциями фильтрации.
 
@@ -56,9 +58,13 @@
 wget https://raw.githubusercontent.com/nagual2/openwrt-extended-backup/main/scripts/openwrt_full_backup -O /backup
 chmod +x /backup
 
-# Скрипт восстановления (необязательно, но рекомендуется)
-wget https://raw.githubusercontent.com/nagual2/openwrt-extended-backup/main/scripts/openwrt_full_restore -O /restore
+# Современный скрипт восстановления
+wget https://raw.githubusercontent.com/nagual2/openwrt-extended-backup/main/scripts/openwrt_restore -O /restore
 chmod +x /restore
+
+# Легаси-вариант (по желанию)
+wget https://raw.githubusercontent.com/nagual2/openwrt-extended-backup/main/scripts/openwrt_full_restore -O /restore_legacy
+chmod +x /restore_legacy
 
 # Вспомогательный список пользовательских пакетов
 wget https://raw.githubusercontent.com/nagual2/openwrt-extended-backup/main/scripts/user_installed_packages -O /usr/bin/user_installed_packages
@@ -107,26 +113,15 @@ make install          # установит пакет через opkg, если 
 4. После скачивания удалите архив на роутере, чтобы освободить оперативную память: `rm -f /tmp/fullbackup_*`.
 5. (Опционально) Для сетевого доступа по SMB запустите `openwrt_full_backup --export=smb` на устройстве с установленным `ksmbd`.
 6. (Опционально) Выполните `user_installed_packages` для генерации списка вручную установленных пакетов.
-7. Для восстановления воспользуйтесь `openwrt_full_restore --archive /tmp/fullbackup_*.tar.gz` (доступен режим dry-run и автоматическая переустановка пакетов).
+7. Для восстановления воспользуйтесь `openwrt_restore --archive /tmp/fullbackup_*.tar.gz` (есть режим dry-run, проверка sha256, переустановка пакетов и опциональный reboot). При необходимости доступен совместимый `openwrt_full_restore`.
 
 ## Опции CLI
 | Скрипт | Опции | Поведение |
 | --- | --- | --- |
 | `openwrt_full_backup` | `-h`, `--help`, `-V`, `--version`, `--export`, `--out-dir`, `--ssh-host`, `--ssh-port`, `--ssh-user`, `--emit-scp-cmd`, `-v`, `-q` | Создаёт архив `/overlay`, по умолчанию сохраняет его в `/tmp` и выводит команду `scp`. При `--export=smb` настраивает временную SMB-шару (при наличии `ksmbd`). |
-| `openwrt_full_restore` | `-h`, `--help` | Выводит краткую справку по доступным опциям. |
-| `openwrt_full_restore` | `-V`, `--version` | Показывает версию и завершает выполнение. |
-| `openwrt_full_restore` | `-a`, `--archive PATH` | Использует указанный архив; без параметра запросит путь интерактивно. |
-| `openwrt_full_restore` | `-d`, `--dry-run` | Выполняет проверку архива и формирует отчёт без изменений в системе. |
-| `openwrt_full_restore` | `-p`, `--packages PATH` | После распаковки запускает скрипт переустановки пакетов по указанному пути. |
-| `openwrt_full_restore` | `--no-packages` | Пропускает шаг с переустановкой пакетов и не задаёт вопрос. |
-| `openwrt_full_restore` | `-y`, `--yes` | Автоматически подтверждает действия (без дополнительных вопросов). |
-| `user_installed_packages` | `-h`, `--help` | Выводит краткую справку и перечисление доступных опций. |
-| `user_installed_packages` | `-V`, `--version` | Выводит текущую версию утилиты и завершает выполнение. |
-| `user_installed_packages` | `--status-file PATH` | Использует альтернативный `opkg` статус-файл (например, для тестов). |
-| `user_installed_packages` | `--user-installed-file PATH` | Добавляет пакеты из произвольного списка (по одному имени на строку). |
-| `user_installed_packages` | `-x`, `--exclude PATTERN` | Исключает пакеты по шаблону (аргумент можно повторять). |
-| `user_installed_packages` | `--include-auto-deps` | Включает зависимости, помеченные `Auto-Installed: yes`. |
-| `user_installed_packages` | без аргументов | Анализирует текущую систему и выводит отсортированные команды `opkg update` и `opkg install …`. |
+| `openwrt_restore` | `--archive`, `--packages`, `--dry-run`, `--overlay`, `--no-reboot`, `--force`, `-h`, `--help`, `-V`, `--version` | Проверяет архив (включая sha256 при наличии), делает снимок текущего `overlay`, безопасно применяет резервную копию, переустанавливает пакеты и позволяет отключить автоматическую перезагрузку. |
+| `openwrt_full_restore` | `-h`, `--help`, `-V`, `--version`, `-a`, `--archive`, `-d`, `--dry-run`, `-p`, `--packages`, `--no-packages`, `-y`, `--yes` | Легаси-скрипт с интерактивным отчётом, резервированием перезаписываемых файлов и подсказками по перезапуску служб. |
+| `user_installed_packages` | `-h`, `--help`, `-V`, `--version`, `--status-file`, `--user-installed-file`, `-x`, `--exclude`, `--include-auto-deps` | Анализирует текущую систему и выводит отсортированные команды `opkg`. |
 
 ## Версионирование и релизы
 - Текущая версия хранится в файле `VERSION` в корне репозитория.
@@ -166,12 +161,12 @@ rm -f /tmp/archive/fullbackup_*
 ### Восстановление и dry-run
 ```sh
 # Проверяем архив без внесения изменений
-openwrt_full_restore --dry-run --archive /tmp/fullbackup_OpenWrt_24.10.4_2024-10-20_12-30-00.tar.gz
+openwrt_restore --dry-run --archive /tmp/fullbackup_OpenWrt_24.10.4_2024-10-20_12-30-00.tar.gz --no-reboot
 
-# Применяем восстановление с автоматическим подтверждением и переустановкой пакетов
-openwrt_full_restore --yes --archive /tmp/fullbackup_OpenWrt_24.10.4_2024-10-20_12-30-00.tar.gz --packages /tmp/opkg-user-packages.sh
+# Применяем восстановление с переустановкой пакетов без автоперезагрузки
+openwrt_restore --archive /tmp/fullbackup_OpenWrt_24.10.4_2024-10-20_12-30-00.tar.gz --packages /tmp/opkg-user-packages.sh --no-reboot
 ```
-После применения проверьте отчёт: он покажет путь к резервным копиям перезаписанных файлов (`/tmp/openwrt-restore-backup-*`) и список служб, которые были перезапущены.
+После применения изучите журнал: утилита сообщит путь к снимку текущего `/overlay`, статус скрипта пакетов и напомнит вручную перезагрузить устройство при необходимости.
 
 ### Список пользовательских пакетов
 ```sh

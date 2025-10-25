@@ -1,5 +1,11 @@
 # Changelog
 
+## [Unreleased]
+
+### Features
+
+* **restore:** add `openwrt_restore` script with safety snapshot, package reinstall flow, and docs/tests updates
+
 ## [0.8.3](https://github.com/nagual2/openwrt-extended-backup/compare/v0.8.2...v0.8.3) (2025-10-24)
 
 
