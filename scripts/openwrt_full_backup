@@ -27,7 +27,7 @@ fi
 PROJECT_ROOT=$(dirname "$SCRIPT_DIR")
 VERSION_FILE="${PROJECT_ROOT}/VERSION"
 SHARE_VERSION_FILE='/usr/share/openwrt-extended-backup/VERSION'
-VERSION_FALLBACK='0.4.1'
+VERSION_FALLBACK='0.1.0'
 
 if [ -r "$VERSION_FILE" ]; then
     VERSION=$(head -n 1 "$VERSION_FILE")

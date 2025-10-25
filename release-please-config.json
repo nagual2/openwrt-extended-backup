@@ -16,6 +16,11 @@
         },
         {
           "type": "generic",
+          "path": "scripts/openwrt_full_restore",
+          "regex": "VERSION_FALLBACK='(?<version>.*)'"
+        },
+        {
+          "type": "generic",
           "path": "scripts/user_installed_packages",
           "regex": "VERSION_FALLBACK='(?<version>.*)'"
         }
