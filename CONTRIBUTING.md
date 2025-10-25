@@ -47,6 +47,14 @@ The repository enforces the **Shell quality checks / Shell quality** GitHub Acti
 
 The steps below require repository administration permissions. Document any deviations in the relevant issue or pull request so contributors stay informed.
 
+### Preparing a release
+
+1. Ensure the working tree is clean on the target branch (`git status` should show no pending changes).
+2. Run `./scripts/release.sh <new-version>` to bump `VERSION`, insert the changelog stub, create the release commit, and add an annotated tag.
+3. Update the placeholder notes in `CHANGELOG.md` before sharing the release publicly.
+4. Push the branch and tag (`git push origin HEAD` and `git push origin v<new-version>`).
+5. Publish the GitHub release using the freshly created tag and updated notes.
+
 ### Branch protection for `main` (Status: ✅ Configured)
 
 Branch protection has been configured for the `main` branch with the following settings:
