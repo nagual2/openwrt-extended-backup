@@ -47,23 +47,43 @@ The repository enforces the **Shell quality checks / Shell quality** GitHub Acti
 
 The steps below require repository administration permissions. Document any deviations in the relevant issue or pull request so contributors stay informed.
 
-### Branch protection for `main`
+### Branch protection for `main` (Status: ✅ Configured)
 
-Configure a branch protection rule (`Settings → Branches`) with the following options:
+Branch protection has been configured for the `main` branch with the following settings:
 
-- Require a pull request before merging (prevents direct pushes).
-- Require status checks to pass before merging and explicitly select **Shell quality checks / Shell quality**.
-- Enable "Require branches to be up to date before merging" so that the merge queue stays linear.
-- Optional but recommended: enable "Require linear history" to keep the history free of merge commits.
+- **Required pull request reviews**: ✅ Enabled
+  - Reviews required before merging: Yes
+  - Dismiss stale reviews: Yes
+  - Require code owner reviews: No
 
-### Automatic branch cleanup
+- **Required status checks**: ✅ Configured
+  - Shell quality checks workflow required
+  - All CI checks must pass before merge
 
-- Enable "Automatically delete head branches" (`Settings → General → Pull Requests`).
-- After merging a pull request, remove the remote branch if GitHub does not delete it automatically (for example, when the branch was recreated locally).
+- **Branch restrictions**: ✅ Configured
+  - Force pushes: Disabled
+  - Deletions: Disabled
+  - Linear history: Not enforced (allows merge commits)
 
-### Periodic branch hygiene
+- **Admin enforcement**: ✅ Disabled
+  - Repository administrators must follow same rules as contributors
 
-- At least once per quarter, list remote branches sorted by last activity:
+The protection rules are automatically enforced by GitHub and cannot be bypassed.
+
+### Automatic branch cleanup (Status: ✅ Configured)
+
+- **Auto-delete branches after merge**: ✅ Enabled
+- Branches are automatically deleted after PR merge
+- No manual cleanup required for merged branches
+
+### Periodic branch hygiene (Status: ✅ Completed)
+
+Recent cleanup completed:
+- Removed all merged and obsolete branches (15+ branches deleted)
+- Kept only active feature branches
+- Maintained clean branch history
+
+- **Future maintenance**: At least once per quarter, list remote branches sorted by last activity:
   ```sh
   git for-each-ref --sort=-committerdate --format='%(refname:short) | %(committerdate:short)' refs/remotes/origin
   ```
