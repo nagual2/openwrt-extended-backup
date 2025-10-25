@@ -141,7 +141,15 @@ to_absolute_path() {
 
 find_share_index_by_name() {
     name=$1
-    share_indexes=$(uci -q show ksmbd | sed -n 's/^ksmbd\.@share\[\([0-9]\+\)\]=share$/\1/p')
+    uci_output=$(uci -q show ksmbd 2>/dev/null || printf '')
+    if [ -z "$uci_output" ]; then
+        return 1
+    fi
+
+    if ! share_indexes=$(printf '%s\n' "$uci_output" | sed -n 's/^ksmbd\.@share\[\([0-9]\+\)\]=share$/\1/p'); then
+        return 1
+    fi
+
     for idx in $share_indexes; do
         current=$(uci -q get "ksmbd.@share[$idx].name" 2>/dev/null || printf '')
         if [ "$current" = "$name" ]; then
@@ -286,9 +294,13 @@ sanitize_token() {
 
 get_firmware_tag() {
     if [ -r /etc/openwrt_release ]; then
-        desc=$(grep "^DISTRIB_DESCRIPTION='" /etc/openwrt_release 2>/dev/null | head -n 1)
+        if ! desc=$(grep "^DISTRIB_DESCRIPTION='" /etc/openwrt_release 2>/dev/null | head -n 1); then
+            desc=''
+        fi
         if [ -n "$desc" ]; then
-            value=$(printf '%s' "$desc" | cut -d"'" -f2)
+            if ! value=$(printf '%s\n' "$desc" | cut -d"'" -f2); then
+                value=''
+            fi
             if [ -n "$value" ]; then
                 sanitize_token "$value"
                 return 0
@@ -352,9 +364,13 @@ create_archive() {
     log_info "Архив сохранён: $ARCHIVE_PATH"
 
     if command -v du >/dev/null 2>&1; then
-        size=$(du -h "$ARCHIVE_PATH" 2>/dev/null | awk '{print $1}' | head -n 1)
-        if [ -n "$size" ]; then
-            log_info "Размер архива: $size"
+        if du_output=$(du -h "$ARCHIVE_PATH" 2>/dev/null); then
+            if ! size=$(printf '%s\n' "$du_output" | awk 'NR==1 {print $1; exit}'); then
+                size=''
+            fi
+            if [ -n "$size" ]; then
+                log_info "Размер архива: $size"
+            fi
         fi
     fi
 }
@@ -373,7 +389,9 @@ ensure_ksmbd_dependencies() {
 
 generate_password() {
     if command -v tr >/dev/null 2>&1; then
-        candidate=$(tr -dc 'A-Za-z0-9' </dev/urandom 2>/dev/null | head -c 16)
+        if ! candidate=$(tr -dc 'A-Za-z0-9' </dev/urandom 2>/dev/null | head -c 16); then
+            candidate=''
+        fi
         if [ -n "$candidate" ]; then
             printf '%s\n' "$candidate"
             return 0
@@ -453,14 +471,18 @@ get_primary_ip() {
     fi
 
     if ip -4 addr show br-lan >/dev/null 2>&1; then
-        candidate=$(ip -4 addr show br-lan | awk '/inet / {print $2}' | cut -d/ -f1 | head -n 1)
+        if ! candidate=$(ip -4 addr show br-lan 2>/dev/null | awk '/inet / {print $2}' | cut -d/ -f1 | head -n 1); then
+            candidate=''
+        fi
         if [ -n "$candidate" ]; then
             printf '%s\n' "$candidate"
             return 0
         fi
     fi
 
-    candidate=$(ip -4 addr show | awk '/inet / && $2 !~ /^127\./ {print $2}' | cut -d/ -f1 | head -n 1)
+    if ! candidate=$(ip -4 addr show 2>/dev/null | awk '/inet / && $2 !~ /^127\./ {print $2}' | cut -d/ -f1 | head -n 1); then
+        candidate=''
+    fi
     if [ -n "$candidate" ]; then
         printf '%s\n' "$candidate"
         return 0
