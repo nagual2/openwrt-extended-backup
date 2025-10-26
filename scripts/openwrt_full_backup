@@ -57,7 +57,36 @@ SSH_USER='root'
 OUT_DIR='/tmp'
 ARCHIVE_FILENAME=''
 ARCHIVE_PATH=''
+ARCHIVE_PRESENT=0
 REMOVE_ARCHIVE_ON_FAILURE=0
+
+UPLOAD_URL=''
+UPLOAD_SCHEME=''
+UPLOAD_USER=''
+UPLOAD_HOST=''
+UPLOAD_PATH=''
+UPLOAD_URL_PORT=''
+UPLOAD_PORT_CLI=''
+UPLOAD_PORT=''
+UPLOAD_IDENTITY=''
+UPLOAD_KNOWN_HOSTS=''
+UPLOAD_RETRIES=1
+UPLOAD_RETRY_SET=0
+UPLOAD_ONLY=0
+DRY_RUN=0
+UPLOAD_CONNECT_TIMEOUT=30
+
+OVERLAY_SOURCE=${OVERLAY_SOURCE:-/overlay}
+case "$OVERLAY_SOURCE" in
+    '')
+        OVERLAY_SOURCE='/overlay'
+        ;;
+    */)
+        if [ "$OVERLAY_SOURCE" != '/' ]; then
+            OVERLAY_SOURCE=${OVERLAY_SOURCE%/}
+        fi
+        ;;
+esac
 
 KSMBD_SHARE_NAME='owrt_archive'
 KSMBD_USER='owrt_backup'
@@ -115,6 +144,13 @@ usage() {
       --ssh-port PORT     Порт SSH (по умолчанию 22)
       --ssh-user USER     Пользователь SSH (по умолчанию root)
       --out-dir PATH      Каталог для архива (по умолчанию /tmp)
+      --upload URL        Загрузить архив на удалённый хост (scp://user@host:/path или sftp://user@host:/path)
+      --identity PATH     Приватный ключ для scp/sftp при загрузке
+      --known-hosts PATH  Альтернативный файл known_hosts для проверки удалённого хоста
+      --port PORT         Порт удалённого хоста для загрузки (по умолчанию 22)
+      --retry COUNT       Количество попыток загрузки (по умолчанию 1)
+      --upload-only       После успешной загрузки удалить локальную копию
+      --dry-run           Проверочный запуск без создания архива и без загрузки
   -q, --quiet             Режим тихого вывода (только ошибки)
   -v                      Расширенный вывод (можно указать дважды)
   -h, --help              Показать эту справку и выйти
@@ -137,6 +173,225 @@ to_absolute_path() {
             printf '%s/%s\n' "$(pwd)" "$1"
             ;;
     esac
+}
+
+resolve_command_path() {
+    candidate=$1
+    if command -v readlink >/dev/null 2>&1; then
+        resolved=$(readlink -f "$candidate" 2>/dev/null || printf '')
+        if [ -n "$resolved" ]; then
+            printf '%s\n' "$resolved"
+            return 0
+        fi
+    fi
+    printf '%s\n' "$candidate"
+}
+
+find_upload_command() {
+    name=$1
+    dropbear_candidate=''
+    openssh_candidate=''
+
+    if command -v "$name" >/dev/null 2>&1; then
+        candidate=$(command -v "$name")
+        resolved=$(resolve_command_path "$candidate")
+        case "$resolved" in
+            *dropbear*)
+                dropbear_candidate=$candidate
+                ;;
+            *)
+                openssh_candidate=$candidate
+                ;;
+        esac
+    fi
+
+    alt="/usr/libexec/dropbear/$name"
+    if [ -z "$dropbear_candidate" ] && [ -x "$alt" ]; then
+        dropbear_candidate=$alt
+    fi
+
+    if [ -n "$dropbear_candidate" ]; then
+        printf '%s\n' "$dropbear_candidate"
+        return 0
+    fi
+
+    if [ -z "$openssh_candidate" ] && command -v "$name" >/dev/null 2>&1; then
+        openssh_candidate=$(command -v "$name")
+    fi
+
+    if [ -n "$openssh_candidate" ]; then
+        printf '%s\n' "$openssh_candidate"
+        return 0
+    fi
+
+    return 1
+}
+
+escape_remote_path() {
+    value=$1
+    escaped=$(printf '%s' "$value" | sed "s/'/'\"'\"'/g")
+    printf "'%s'\n" "$escaped"
+}
+
+escape_for_double_quotes() {
+    value=$1
+    escaped=$(printf '%s' "$value" | sed 's/\\/\\\\/g; s/"/\\"/g')
+    printf '%s\n' "$escaped"
+}
+
+join_command_arguments() {
+    result=''
+    while [ "$#" -gt 0 ]; do
+        arg=$1
+        shift
+        escaped=$(printf '%s' "$arg" | sed "s/'/'\"'\"'/g")
+        piece="'$escaped'"
+        if [ -z "$result" ]; then
+            result=$piece
+        else
+            result="$result $piece"
+        fi
+    done
+    printf '%s\n' "$result"
+}
+
+format_host_for_command() {
+    host_value=$1
+    case "$host_value" in
+        *:*)
+            printf '[%s]\n' "$host_value"
+            ;;
+        *)
+            printf '%s\n' "$host_value"
+            ;;
+    esac
+}
+
+format_upload_destination() {
+    host_display=$UPLOAD_HOST
+    case "$host_display" in
+        *:*)
+            host_display="[$host_display]"
+            ;;
+    esac
+    if [ -n "$UPLOAD_USER" ]; then
+        printf '%s@%s:%s\n' "$UPLOAD_USER" "$host_display" "$UPLOAD_PATH"
+    else
+        printf '%s:%s\n' "$host_display" "$UPLOAD_PATH"
+    fi
+}
+
+parse_upload_url() {
+    url=$1
+
+    case "$url" in
+        scp://* | sftp://*)
+            ;;
+        *)
+            fatal "Неподдерживаемый URL для --upload: $url" "$EX_USAGE"
+            ;;
+    esac
+
+    UPLOAD_SCHEME=${url%%://*}
+    rest=${url#*://}
+
+    if [ -z "$rest" ]; then
+        fatal 'URL для --upload должен содержать хост' "$EX_USAGE"
+    fi
+
+    user_part=''
+    host_part=$rest
+
+    case "$rest" in
+        *@*)
+            user_part=${rest%%@*}
+            host_part=${rest#*@}
+            ;;
+    esac
+
+    UPLOAD_USER=$user_part
+
+    if [ -z "$host_part" ]; then
+        fatal 'URL для --upload должен содержать хост' "$EX_USAGE"
+    fi
+
+    remainder=''
+    if [ "${host_part#\[}" != "$host_part" ]; then
+        host_body=${host_part#\[}
+        host_body=${host_body%%]*}
+        if [ -z "$host_body" ]; then
+            fatal 'Некорректный формат URL для --upload' "$EX_USAGE"
+        fi
+        UPLOAD_HOST=$host_body
+        remainder=${host_part#[$host_body]}
+    else
+        host_candidate=${host_part%%[:/]*}
+        if [ -z "$host_candidate" ]; then
+            fatal 'URL для --upload должен содержать хост' "$EX_USAGE"
+        fi
+        UPLOAD_HOST=$host_candidate
+        remainder=${host_part#"$host_candidate"}
+    fi
+
+    port_value=''
+    path_value=''
+
+    while [ -n "$remainder" ]; do
+        case "$remainder" in
+            :*)
+                candidate=${remainder#:}
+                if [ -z "$candidate" ]; then
+                    fatal 'URL для --upload должен содержать путь' "$EX_USAGE"
+                fi
+                if [ "${candidate#/}" != "$candidate" ]; then
+                    path_value=${remainder#:}
+                    remainder=''
+                    continue
+                fi
+                next_remainder=''
+                case "$candidate" in
+                    */*)
+                        before=${candidate%%/*}
+                        next_remainder=/${candidate#*/}
+                        ;;
+                    *)
+                        before=$candidate
+                        next_remainder=''
+                        ;;
+                esac
+                case "$before" in
+                    *[!0-9]*)
+                        path_value=${remainder#:}
+                        remainder=''
+                        ;;
+                    '')
+                        fatal 'URL для --upload должен содержать путь' "$EX_USAGE"
+                        ;;
+                    *)
+                        if [ -n "$port_value" ]; then
+                            fatal 'Порт в URL указан более одного раза' "$EX_USAGE"
+                        fi
+                        port_value=$before
+                        remainder=$next_remainder
+                        ;;
+                esac
+                ;;
+            /*)
+                path_value=$remainder
+                remainder=''
+                ;;
+            *)
+                fatal 'Некорректный формат URL для --upload' "$EX_USAGE"
+                ;;
+        esac
+    done
+
+    if [ -z "$path_value" ]; then
+        fatal 'URL для --upload должен содержать путь' "$EX_USAGE"
+    fi
+
+    UPLOAD_PATH=$path_value
+    UPLOAD_URL_PORT=$port_value
 }
 
 find_share_index_by_name() {
@@ -229,6 +484,49 @@ parse_args() {
                 shift || fatal 'Опция --out-dir требует аргумент' "$EX_USAGE"
                 OUT_DIR=$1
                 ;;
+            --upload=*)
+                UPLOAD_URL=${1#--upload=}
+                ;;
+            --upload)
+                shift || fatal 'Опция --upload требует аргумент' "$EX_USAGE"
+                UPLOAD_URL=$1
+                ;;
+            --identity=*)
+                UPLOAD_IDENTITY=${1#--identity=}
+                ;;
+            --identity)
+                shift || fatal 'Опция --identity требует аргумент' "$EX_USAGE"
+                UPLOAD_IDENTITY=$1
+                ;;
+            --known-hosts=*)
+                UPLOAD_KNOWN_HOSTS=${1#--known-hosts=}
+                ;;
+            --known-hosts)
+                shift || fatal 'Опция --known-hosts требует аргумент' "$EX_USAGE"
+                UPLOAD_KNOWN_HOSTS=$1
+                ;;
+            --port=*)
+                UPLOAD_PORT_CLI=${1#--port=}
+                ;;
+            --port)
+                shift || fatal 'Опция --port требует аргумент' "$EX_USAGE"
+                UPLOAD_PORT_CLI=$1
+                ;;
+            --retry=*)
+                UPLOAD_RETRIES=${1#--retry=}
+                UPLOAD_RETRY_SET=1
+                ;;
+            --retry)
+                shift || fatal 'Опция --retry требует аргумент' "$EX_USAGE"
+                UPLOAD_RETRIES=$1
+                UPLOAD_RETRY_SET=1
+                ;;
+            --upload-only)
+                UPLOAD_ONLY=1
+                ;;
+            --dry-run)
+                DRY_RUN=1
+                ;;
             -v)
                 if [ "$LOG_LEVEL" -lt 2 ]; then
                     LOG_LEVEL=$((LOG_LEVEL + 1))
@@ -275,6 +573,79 @@ parse_args() {
             fatal 'Порт SSH должен быть целым числом' "$EX_USAGE"
             ;;
     esac
+
+    case "$UPLOAD_RETRIES" in
+        '' | *[!0-9]*)
+            fatal 'Опция --retry требует положительное целое число' "$EX_USAGE"
+            ;;
+    esac
+
+    if [ "$UPLOAD_RETRIES" -eq 0 ]; then
+        fatal 'Опция --retry требует положительное целое число' "$EX_USAGE"
+    fi
+
+    if [ -n "$UPLOAD_PORT_CLI" ]; then
+        case "$UPLOAD_PORT_CLI" in
+            '' | *[!0-9]*)
+                fatal 'Порт для загрузки должен быть целым числом' "$EX_USAGE"
+                ;;
+        esac
+        if [ "$UPLOAD_PORT_CLI" -eq 0 ]; then
+            fatal 'Порт для загрузки должен быть положительным числом' "$EX_USAGE"
+        fi
+    fi
+
+    if [ "$UPLOAD_ONLY" -eq 1 ] && [ -z "$UPLOAD_URL" ]; then
+        fatal 'Опция --upload-only требует совместного использования с --upload' "$EX_USAGE"
+    fi
+
+    if [ -z "$UPLOAD_URL" ]; then
+        if [ -n "$UPLOAD_IDENTITY" ] || [ -n "$UPLOAD_KNOWN_HOSTS" ] || [ -n "$UPLOAD_PORT_CLI" ] || [ "$UPLOAD_RETRY_SET" -eq 1 ]; then
+            fatal 'Опции --identity, --known-hosts, --port и --retry доступны только вместе с --upload' "$EX_USAGE"
+        fi
+        UPLOAD_PORT=''
+    else
+        parse_upload_url "$UPLOAD_URL"
+        if [ -n "$UPLOAD_PORT_CLI" ]; then
+            UPLOAD_PORT=$UPLOAD_PORT_CLI
+        elif [ -n "$UPLOAD_URL_PORT" ]; then
+            UPLOAD_PORT=$UPLOAD_URL_PORT
+        else
+            UPLOAD_PORT='22'
+        fi
+
+        if [ -n "$UPLOAD_IDENTITY" ]; then
+            UPLOAD_IDENTITY=$(to_absolute_path "$UPLOAD_IDENTITY")
+            if [ "$DRY_RUN" -eq 0 ] && [ ! -r "$UPLOAD_IDENTITY" ]; then
+                fatal "Файл ключа недоступен: $UPLOAD_IDENTITY" "$EX_USAGE"
+            fi
+        fi
+        if [ -n "$UPLOAD_KNOWN_HOSTS" ]; then
+            UPLOAD_KNOWN_HOSTS=$(to_absolute_path "$UPLOAD_KNOWN_HOSTS")
+            if [ "$DRY_RUN" -eq 0 ] && [ ! -r "$UPLOAD_KNOWN_HOSTS" ]; then
+                fatal "Файл known_hosts недоступен: $UPLOAD_KNOWN_HOSTS" "$EX_USAGE"
+            fi
+        fi
+    fi
+
+    if [ -n "$UPLOAD_PORT" ]; then
+        case "$UPLOAD_PORT" in
+            '' | *[!0-9]*)
+                fatal 'Порт для загрузки должен быть целым числом' "$EX_USAGE"
+                ;;
+        esac
+        if [ "$UPLOAD_PORT" -eq 0 ]; then
+            fatal 'Порт для загрузки должен быть положительным числом' "$EX_USAGE"
+        fi
+    fi
+
+    if [ "$UPLOAD_ONLY" -eq 1 ] && [ "$EMIT_SCP_CMD" -eq 1 ]; then
+        fatal 'Опции --upload-only и --emit-scp-cmd несовместимы' "$EX_USAGE"
+    fi
+
+    if [ "$UPLOAD_ONLY" -eq 1 ] && [ "$EXPORT_MODE" = 'smb' ]; then
+        fatal 'Опция --upload-only несовместима с --export=smb' "$EX_USAGE"
+    fi
 
     OUT_DIR=$(to_absolute_path "$OUT_DIR")
 }
@@ -328,26 +699,38 @@ create_archive() {
     timestamp_label=$(date +'%Y-%m-%d_%H-%M-%S')
     ARCHIVE_FILENAME="fullbackup_${firmware}_${timestamp_label}.tar.gz"
     ARCHIVE_PATH="${OUT_DIR%/}/$ARCHIVE_FILENAME"
+    ARCHIVE_PRESENT=0
 
     if [ -e "$ARCHIVE_PATH" ]; then
         fatal "Файл уже существует: $ARCHIVE_PATH" "$EX_SOFTWARE"
     fi
 
+    if [ ! -d "$OVERLAY_SOURCE" ]; then
+        fatal "Каталог отсутствует: $OVERLAY_SOURCE" "$EX_SOFTWARE"
+    fi
+
     log_info "Создание архива: $ARCHIVE_PATH"
+
+    if [ "$DRY_RUN" -eq 1 ]; then
+        log_info 'Режим dry-run: архив не создаётся.'
+        return 0
+    fi
+
     REMOVE_ARCHIVE_ON_FAILURE=1
 
     if ! tar -czpf "$ARCHIVE_PATH" \
         --preserve-permissions \
         --same-owner \
-        --exclude='/overlay/work' \
-        --exclude='/overlay/upper/run' \
-        --exclude='/overlay/upper/etc/os-release' \
-        --exclude='/overlay/upper/usr/lib/os-release' \
-        /overlay; then
+        --exclude="${OVERLAY_SOURCE}/work" \
+        --exclude="${OVERLAY_SOURCE}/upper/run" \
+        --exclude="${OVERLAY_SOURCE}/upper/etc/os-release" \
+        --exclude="${OVERLAY_SOURCE}/upper/usr/lib/os-release" \
+        "$OVERLAY_SOURCE"; then
         fatal 'Не удалось создать архив' "$EX_SOFTWARE"
     fi
 
     REMOVE_ARCHIVE_ON_FAILURE=0
+    ARCHIVE_PRESENT=1
 
     log_info "Архив сохранён: $ARCHIVE_PATH"
 
@@ -357,6 +740,166 @@ create_archive() {
             log_info "Размер архива: $size"
         fi
     fi
+}
+
+run_scp_upload() {
+    scp_bin=$(find_upload_command scp 2>/dev/null || printf '')
+    if [ -z "$scp_bin" ]; then
+        fatal "Требуемая утилита 'scp' недоступна" "$EX_UNAVAILABLE"
+    fi
+
+    remote_host=$(format_host_for_command "$UPLOAD_HOST")
+    if [ -n "$UPLOAD_USER" ]; then
+        remote_target="$UPLOAD_USER@$remote_host"
+    else
+        remote_target="$remote_host"
+    fi
+    remote_path=$(escape_remote_path "$UPLOAD_PATH")
+    target="${remote_target}:${remote_path}"
+
+    set -- "$scp_bin"
+
+    if [ -n "$UPLOAD_PORT" ]; then
+        set -- "$@" -P "$UPLOAD_PORT"
+    fi
+
+    if [ -n "$UPLOAD_IDENTITY" ]; then
+        set -- "$@" -i "$UPLOAD_IDENTITY"
+    fi
+
+    set -- "$@" -o BatchMode=yes -o "ConnectTimeout=$UPLOAD_CONNECT_TIMEOUT" -o StrictHostKeyChecking=yes
+
+    if [ -n "$UPLOAD_KNOWN_HOSTS" ]; then
+        set -- "$@" -o "UserKnownHostsFile=$UPLOAD_KNOWN_HOSTS"
+    fi
+
+    set -- "$@" "$ARCHIVE_PATH" "$target"
+
+    command_desc=$(join_command_arguments "$@")
+
+    if [ "$DRY_RUN" -eq 1 ]; then
+        log_info "Режим dry-run: команда %s" "$command_desc"
+        return 0
+    fi
+
+    log_debug "Команда загрузки: %s" "$command_desc"
+
+    "$@"
+}
+
+run_sftp_upload() {
+    sftp_bin=$(find_upload_command sftp 2>/dev/null || printf '')
+    if [ -z "$sftp_bin" ]; then
+        fatal "Требуемая утилита 'sftp' недоступна" "$EX_UNAVAILABLE"
+    fi
+
+    remote_host=$(format_host_for_command "$UPLOAD_HOST")
+    if [ -n "$UPLOAD_USER" ]; then
+        target="$UPLOAD_USER@$remote_host"
+    else
+        target="$remote_host"
+    fi
+
+    batch_file=$(mktemp 2>/dev/null || printf '')
+    if [ -z "$batch_file" ]; then
+        fatal 'Не удалось создать временный файл для sftp' "$EX_SOFTWARE"
+    fi
+
+    escaped_local=$(escape_for_double_quotes "$ARCHIVE_PATH")
+    escaped_remote=$(escape_for_double_quotes "$UPLOAD_PATH")
+    printf 'put "%s" "%s"\n' "$escaped_local" "$escaped_remote" >"$batch_file"
+
+    set -- "$sftp_bin"
+
+    if [ -n "$UPLOAD_PORT" ]; then
+        set -- "$@" -P "$UPLOAD_PORT"
+    fi
+
+    if [ -n "$UPLOAD_IDENTITY" ]; then
+        set -- "$@" -i "$UPLOAD_IDENTITY"
+    fi
+
+    set -- "$@" -o BatchMode=yes -o "ConnectTimeout=$UPLOAD_CONNECT_TIMEOUT" -o StrictHostKeyChecking=yes
+
+    if [ -n "$UPLOAD_KNOWN_HOSTS" ]; then
+        set -- "$@" -o "UserKnownHostsFile=$UPLOAD_KNOWN_HOSTS"
+    fi
+
+    set -- "$@" -b "$batch_file" "$target"
+
+    command_desc=$(join_command_arguments "$@")
+
+    if [ "$DRY_RUN" -eq 1 ]; then
+        log_info "Режим dry-run: команда %s" "$command_desc"
+        log_info "Режим dry-run: put \"%s\" \"%s\"" "$ARCHIVE_PATH" "$UPLOAD_PATH"
+        rm -f "$batch_file"
+        return 0
+    fi
+
+    log_debug "Команда загрузки: %s" "$command_desc"
+
+    if "$@"; then
+        rm -f "$batch_file"
+        return 0
+    fi
+
+    status=$?
+    rm -f "$batch_file"
+    return $status
+}
+
+perform_remote_upload() {
+    if [ -z "$UPLOAD_URL" ]; then
+        return 0
+    fi
+
+    destination=$(format_upload_destination)
+
+    if [ "$DRY_RUN" -eq 0 ]; then
+        if [ "$ARCHIVE_PRESENT" -eq 0 ] || [ ! -f "$ARCHIVE_PATH" ]; then
+            fatal "Архив отсутствует: $ARCHIVE_PATH" "$EX_SOFTWARE"
+        fi
+    fi
+
+    attempts=0
+    last_status=1
+
+    while [ "$attempts" -lt "$UPLOAD_RETRIES" ]; do
+        attempts=$((attempts + 1))
+        if [ "$DRY_RUN" -eq 1 ]; then
+            log_info "Режим dry-run: загрузка на %s (попытка %d из %d)" "$destination" "$attempts" "$UPLOAD_RETRIES"
+        else
+            if [ "$UPLOAD_RETRIES" -gt 1 ]; then
+                log_info "Загрузка архива на %s (попытка %d из %d)" "$destination" "$attempts" "$UPLOAD_RETRIES"
+            else
+                log_info "Загрузка архива на %s" "$destination"
+            fi
+        fi
+
+        if [ "$UPLOAD_SCHEME" = 'sftp' ]; then
+            run_sftp_upload
+        else
+            run_scp_upload
+        fi
+        status=$?
+
+        if [ "$status" -eq 0 ]; then
+            if [ "$DRY_RUN" -eq 0 ]; then
+                log_info 'Загрузка завершена.'
+            fi
+            return 0
+        fi
+
+        if [ "$DRY_RUN" -eq 1 ]; then
+            return 0
+        fi
+
+        log_error "Загрузка не удалась (код %d)." "$status"
+        last_status=$status
+    done
+
+    log_error "Не удалось загрузить архив на %s после %d попыток." "$destination" "$UPLOAD_RETRIES"
+    exit "$last_status"
 }
 
 ensure_ksmbd_dependencies() {
@@ -480,6 +1023,19 @@ emit_scp_instruction() {
     fi
     command_text="$command_text $SSH_USER@$SSH_HOST:$ARCHIVE_PATH <destination>"
 
+    if [ "$DRY_RUN" -eq 1 ]; then
+        log_info "Режим dry-run: готовая команда SCP: $command_text"
+        if [ "$EMIT_SCP_CMD" -eq 1 ]; then
+            printf '%s\n' "$command_text"
+        fi
+        return
+    fi
+
+    if [ "$ARCHIVE_PRESENT" -eq 0 ] || [ ! -f "$ARCHIVE_PATH" ]; then
+        log_info 'Локальная копия архива недоступна, команда SCP не выводится.'
+        return
+    fi
+
     log_info "Готовая команда SCP: $command_text"
 
     if [ "$EMIT_SCP_CMD" -eq 1 ]; then
@@ -491,16 +1047,48 @@ parse_args "$@"
 
 prepare_environment
 create_archive
+perform_remote_upload
+
+if [ "$UPLOAD_ONLY" -eq 1 ] && [ -n "$UPLOAD_URL" ]; then
+    if [ "$DRY_RUN" -eq 1 ]; then
+        log_info 'Режим dry-run: локальная копия не сохраняется (--upload-only).'
+    else
+        if rm -f "$ARCHIVE_PATH"; then
+            ARCHIVE_PRESENT=0
+            log_info 'Локальная копия удалена (--upload-only).'
+        else
+            fatal "Не удалось удалить локальную копию: $ARCHIVE_PATH"
+        fi
+    fi
+fi
 
 case "$EXPORT_MODE" in
     scp)
-        emit_scp_instruction
+        if [ "$UPLOAD_ONLY" -eq 1 ] && [ -n "$UPLOAD_URL" ]; then
+            if [ "$DRY_RUN" -eq 1 ]; then
+                log_info 'Режим dry-run: команда SCP не требуется (--upload-only).'
+            else
+                log_info 'Команда SCP не требуется (--upload-only).'
+            fi
+        else
+            emit_scp_instruction
+        fi
         ;;
     smb)
-        setup_smb_export
+        if [ "$DRY_RUN" -eq 1 ]; then
+            log_info 'Режим dry-run: SMB-экспорт пропущен.'
+        else
+            setup_smb_export
+        fi
         ;;
     local)
-        log_info "Архив сохранён в $ARCHIVE_PATH"
+        if [ "$DRY_RUN" -eq 1 ]; then
+            log_info 'Режим dry-run: архив не создавался.'
+        elif [ "$UPLOAD_ONLY" -eq 1 ] && [ -n "$UPLOAD_URL" ]; then
+            log_info 'Архив не сохранён локально (--upload-only).'
+        else
+            log_info "Архив сохранён в $ARCHIVE_PATH"
+        fi
         ;;
 esac
 

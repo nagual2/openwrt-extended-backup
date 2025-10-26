@@ -152,6 +152,28 @@ else
     rm -f "$UNQUOTED_REPORT"
 fi
 
+BATS_STATUS=0
+BATS_FILES=$(find tests -name '*.bats' -type f 2>/dev/null | sort)
+if [ -n "$BATS_FILES" ]; then
+    if command -v bats >/dev/null 2>&1; then
+        set --
+        while IFS= read -r path; do
+            set -- "$@" "$path"
+        done <<EOF
+$BATS_FILES
+EOF
+
+        if [ "$#" -gt 0 ]; then
+            if ! bats --print-output-on-failure --timing "$@"; then
+                BATS_STATUS=$?
+            fi
+        fi
+    else
+        printf 'bats executable not found, unable to run .bats tests.\n' >&2
+        BATS_STATUS=1
+    fi
+fi
+
 if [ "$SHEBANG_ERRORS" -ne 0 ] && [ -f "$SHEBANG_REPORT" ]; then
     printf '\nShebang violations detected:\n' >&2
     cat "$SHEBANG_REPORT" >&2
@@ -179,7 +201,7 @@ fi
 
 EXIT_STATUS=0
 if [ "$SHEBANG_ERRORS" -ne 0 ] || [ "$EVAL_ERRORS" -ne 0 ] || [ "$SHFMT_STATUS" -ne 0 ] ||
-    [ "$SHELLCHECK_STATUS" -ne 0 ] || [ "$UNQUOTED_ERRORS" -ne 0 ]; then
+    [ "$SHELLCHECK_STATUS" -ne 0 ] || [ "$UNQUOTED_ERRORS" -ne 0 ] || [ "$BATS_STATUS" -ne 0 ]; then
     EXIT_STATUS=1
 fi
 
