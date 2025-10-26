@@ -1,0 +1,102 @@
+name: OpenWrt package builds
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build (${{ matrix.target }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        include:
+          - target: x86_64
+            sdk_target: x86-64
+          - target: mipsel_24kc
+            sdk_target: ramips-mt7621
+          - target: arm_cortex-a7
+            sdk_target: bcm27xx-bcm2709
+    env:
+      SDK_VERSION: 23.05.3
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332 # v4.1.7
+
+      - name: Prepare output directory
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf "dist/${{ matrix.target }}"
+          mkdir -p "dist/${{ matrix.target }}"
+
+      - name: Build package with OpenWrt SDK
+        shell: bash
+        env:
+          TARGET_NAME: ${{ matrix.target }}
+          SDK_TARGET: ${{ matrix.sdk_target }}
+        run: |
+          set -euo pipefail
+          SDK_TAG="${SDK_VERSION}-${SDK_TARGET}"
+          docker run --rm \
+            -v "${PWD}:/work" \
+            -e TARGET_NAME="${TARGET_NAME}" \
+            -e FEED_NAME=ctoolkit \
+            -e FEED_PATH=/work \
+            -e OUTPUT_ROOT=/work/dist \
+            -e SDK_DIR=/sdk \
+            openwrtorg/sdk:"${SDK_TAG}" \
+            bash /work/scripts/ci/build-openwrt-package.sh
+
+      - name: Verify build outputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          ls dist/${{ matrix.target }}/*.ipk
+          if [ ! -f dist/${{ matrix.target }}/Packages.gz ]; then
+            echo "Packages.gz was not generated" >&2
+          fi
+
+      - name: Archive feed contents
+        shell: bash
+        run: |
+          set -euo pipefail
+          tar -czf "dist/${{ matrix.target }}.tar.gz" -C dist "${{ matrix.target }}"
+
+      - name: Publish release assets
+        if: github.event_name == 'push'
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          TAG_NAME="${GITHUB_REF_NAME}"
+          files=()
+          for candidate in dist/${{ matrix.target }}/*.ipk dist/${{ matrix.target }}/Packages.gz dist/${{ matrix.target }}/sha256sums dist/${{ matrix.target }}.tar.gz; do
+            if [ -f "$candidate" ]; then
+              files+=("$candidate")
+            fi
+          done
+          if [ "${#files[@]}" -gt 0 ]; then
+            if ! gh release view "$TAG_NAME" >/dev/null 2>&1; then
+              gh release create "$TAG_NAME" --title "$TAG_NAME" --notes "Automated OpenWrt package build artifacts"
+            fi
+            gh release upload "$TAG_NAME" "${files[@]}" --clobber
+          fi
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@26f96dfa697d77e81fd5907df203aa23a56210a8 # v4.3.0
+        with:
+          name: ctoolkit-${{ matrix.target }}
+          path: |
+            dist/${{ matrix.target }}
+            dist/${{ matrix.target }}.tar.gz
+          if-no-files-found: error

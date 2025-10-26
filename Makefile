@@ -1,7 +1,7 @@
 SHELL := /bin/sh
 .RECIPEPREFIX := >
 
-PKG_NAME := openwrt-extended-backup
+PKG_NAME := ctoolkit
 PKG_VERSION := $(strip $(shell cat VERSION))
 PKG_RELEASE ?= 1
 WITH_KSMBD ?= 1
@@ -10,60 +10,33 @@ OUTPUT_DIR ?= dist
 WORK_DIR := build/ipk
 DATA_DIR := $(WORK_DIR)/data
 CONTROL_DIR := $(WORK_DIR)/control
+SHARE_DIR := openwrt-extended-backup
 
 IPK_FILENAME := $(PKG_NAME)_$(PKG_VERSION)-$(PKG_RELEASE)_all.ipk
 IPK_PATH := $(OUTPUT_DIR)/$(IPK_FILENAME)
 
+CONTROL_DEPENDS := tar, coreutils-sha256sum
 ifeq ($(WITH_KSMBD),1)
-CONTROL_DEPENDS := tar, ksmbd-tools
-else
-CONTROL_DEPENDS := tar
+CONTROL_DEPENDS := $(CONTROL_DEPENDS), ksmbd-tools
 endif
 
-SHFMT ?= shfmt
-SHELLCHECK ?= shellcheck
-BATS ?= bats
-SHELL_QUALITY := ./scripts/ci/check-shell-quality.sh
-LIST_SHELLS := ./scripts/ci/list-shell-files.sh
+.PHONY: all ipk clean install
 
-.PHONY: all fmt fmt-check lint test package ipk clean install
-
-all: lint fmt-check test
-
-fmt:
-> set -- $$($(LIST_SHELLS)); \
-> status=$$?; \
-> if [ $$status -ne 0 ]; then \
->     exit $$status; \
-> fi; \
-> if [ "$$#" -gt 0 ]; then \
->     $(SHFMT) -i 4 -ci -w "$$@"; \
-> else \
->     printf 'No shell scripts detected.\n'; \
-> fi
-
-fmt-check:
-> SHFMT_BIN="$(SHFMT)" SKIP_STATIC_ANALYSIS=1 SKIP_SHELLCHECK=1 $(SHELL_QUALITY)
-
-lint:
-> SHFMT_BIN="$(SHFMT)" SHELLCHECK_BIN="$(SHELLCHECK)" SKIP_SHFMT=1 $(SHELL_QUALITY)
-
-test:
-> $(BATS) tests
-
-package: ipk
+all: ipk
 
 ipk: $(IPK_PATH)
 
-$(IPK_PATH): scripts/openwrt_full_backup scripts/openwrt_full_restore scripts/openwrt_restore scripts/user_installed_packages VERSION
+$(IPK_PATH): scripts/openwrt_full_backup scripts/openwrt_full_restore scripts/user_installed_packages VERSION
 > rm -rf $(WORK_DIR)
-> mkdir -p $(DATA_DIR)/usr/sbin
-> mkdir -p $(DATA_DIR)/usr/share/$(PKG_NAME)
-> install -m 0755 scripts/openwrt_full_backup $(DATA_DIR)/usr/sbin/openwrt_full_backup
-> install -m 0755 scripts/openwrt_full_restore $(DATA_DIR)/usr/sbin/openwrt_full_restore
-> install -m 0755 scripts/openwrt_restore $(DATA_DIR)/usr/sbin/openwrt_restore
-> install -m 0755 scripts/user_installed_packages $(DATA_DIR)/usr/sbin/user_installed_packages
-> install -m 0644 VERSION $(DATA_DIR)/usr/share/$(PKG_NAME)/VERSION
+> mkdir -p $(DATA_DIR)/usr/bin
+> mkdir -p $(DATA_DIR)/usr/share/$(SHARE_DIR)
+> mkdir -p $(DATA_DIR)/usr/share/doc/$(PKG_NAME)
+> install -m 0755 scripts/openwrt_full_backup $(DATA_DIR)/usr/bin/openwrt_full_backup
+> install -m 0755 scripts/openwrt_full_restore $(DATA_DIR)/usr/bin/openwrt_full_restore
+> install -m 0755 scripts/user_installed_packages $(DATA_DIR)/usr/bin/user_installed_packages
+> install -m 0644 VERSION $(DATA_DIR)/usr/share/$(SHARE_DIR)/VERSION
+> install -m 0644 README.md $(DATA_DIR)/usr/share/doc/$(PKG_NAME)/README.md
+> install -m 0644 LICENSE $(DATA_DIR)/usr/share/doc/$(PKG_NAME)/LICENSE
 > mkdir -p $(CONTROL_DIR)
 > printf 'Package: %s\n' $(PKG_NAME) > $(CONTROL_DIR)/control
 > printf 'Version: %s-%s\n' $(PKG_VERSION) $(PKG_RELEASE) >> $(CONTROL_DIR)/control
@@ -72,7 +45,7 @@ $(IPK_PATH): scripts/openwrt_full_backup scripts/openwrt_full_restore scripts/op
 > printf 'Priority: optional\n' >> $(CONTROL_DIR)/control
 > printf 'Maintainer: openwrt-extended-backup maintainers\n' >> $(CONTROL_DIR)/control
 > printf 'Depends: %s\n' "$(CONTROL_DEPENDS)" >> $(CONTROL_DIR)/control
-> printf 'Description: OpenWrt full backup helpers and user package listing scripts.\n' >> $(CONTROL_DIR)/control
+> printf 'Description: Backup, restore, and package listing toolkit for OpenWrt.\n' >> $(CONTROL_DIR)/control
 > tar -C $(DATA_DIR) -czf $(WORK_DIR)/data.tar.gz .
 > tar -C $(CONTROL_DIR) -czf $(WORK_DIR)/control.tar.gz .
 > printf '2.0\n' > $(WORK_DIR)/debian-binary
