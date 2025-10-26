@@ -6,11 +6,12 @@ The following branch protection settings have been configured for the `main` bra
 - **Required pull request reviews**: ✅ Enabled
   - Reviews required before merging: Yes
   - Dismiss stale reviews: Yes
-  - Require code owner reviews: No
+  - Require code owner reviews: Yes (maintainers are assigned via `CODEOWNERS` for `scripts/` and `.github/workflows/`)
 
 - **Required status checks**: ✅ Configured
-  - CI workflow required (`CI / Lint and test`)
-  - All CI checks must pass
+  - Shell quality checks / Shell quality
+  - Post-release verify / Verify release metadata
+  - Branch must be up to date with `main` before merging
 
 - **Branch restrictions**: ✅ Configured
   - Force pushes: Disabled
@@ -22,9 +23,9 @@ The following branch protection settings have been configured for the `main` bra
 
 ## CI Requirements:
 The following CI checks are required before merging:
-- **ci** workflow (`CI / Lint and test` job): Must pass
-- Shell scripts must pass linting (ShellCheck, shfmt)
-- Automated tests must succeed (Bats)
+- **shell-quality** workflow: Must pass
+- All shell scripts must pass linting (shellcheck, shfmt)
+- Code quality standards must be met
 
 ## Branch Naming Convention:
 - Feature branches: `feat/feature-name`

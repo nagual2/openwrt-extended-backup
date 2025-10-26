@@ -18,18 +18,27 @@ Create branches that describe the type of work you are doing. We use the followi
 
 Use lowercase words separated by hyphens for the `<short-topic>` part (for example, `feature/add-backup-verification`).
 
+## Minimal contribution flow
+
+1. Create a topic branch from `main` using the naming scheme above.
+2. Make your changes and run `./scripts/ci/check-shell-quality.sh` locally.
+3. Push the branch to your fork (or the main repository if you have access) and open a pull request targeting `main`.
+4. Wait for the required checks to succeed:
+   - **Shell quality checks / Shell quality**;
+   - **Post-release verify / Verify release metadata**.
+5. Address review feedback. Changes to `scripts/` and `.github/workflows/` automatically request a maintainer review via `CODEOWNERS`.
+6. Merge only after the pull request is approved and all checks are green. Force pushes to `main` are blocked, so use the merge button once CI is finished.
+
 ## Local validation checklist
 
 Before opening a pull request:
 
 1. Ensure your branch is based on the latest `main` (`git fetch origin && git rebase origin/main`).
-2. Run the same checks that GitHub Actions executes:
+2. Run the quality gate that mirrors the CI pipeline:
    ```sh
-   find . -path './.git' -prune -o -type f \( -name '*.sh' -o -perm -111 \) -print0 | xargs -0 -r shellcheck -s sh --config-file=.shellcheckrc
-   find . -path './.git' -prune -o -type f \( -name '*.sh' -o -perm -111 \) -print0 | xargs -0 -r shfmt -d -i 2 -bn -ci -sr
-   BATS_SHELL=/bin/sh bats --print-output-on-failure tests
+   ./scripts/ci/check-shell-quality.sh
    ```
-   Fix any reported issues before submitting your changes.
+   Resolve any reported issues or formatting patches created under the `reports/` directory.
 3. Double-check that executable shell scripts keep their shebangs (`#!/bin/sh`) and remain POSIX-compliant.
 4. Update documentation, examples, and changelog entries when behaviour changes.
 
@@ -37,25 +46,21 @@ Before opening a pull request:
 
 - Submit focused pull requests that address a single problem.
 - Fill out the pull request template completely, including testing notes.
-- Request at least one reviewer and respond to feedback promptly.
+- Request at least one reviewer and respond to feedback promptly. Pull requests that touch `scripts/` or `.github/workflows/` require an approval from the assigned maintainer via `CODEOWNERS`.
 - Avoid force-pushing once a review has started unless you are rebasing on top of the latest `main` or addressing review feedback. Mention significant rebases in a comment so reviewers can re-orient themselves.
 - Allow the automation to finish after the final approval; do not merge when required checks are still running or failing.
 
 ### Required status checks
 
-The repository enforces the **CI / Lint and test** GitHub Action. Pull requests must be green on that check before merge. If new checks are added in the future, include them here so contributors know what is expected.
+The repository enforces the following GitHub Actions. Pull requests must be green on all of them before merge:
+- **Shell quality checks / Shell quality**
+- **Post-release verify / Verify release metadata**
+
+If new checks are added in the future, include them here so contributors know what is expected.
 
 ## Maintainer playbook
 
 The steps below require repository administration permissions. Document any deviations in the relevant issue or pull request so contributors stay informed.
-
-### Preparing a release
-
-1. Ensure the working tree is clean on the target branch (`git status` should show no pending changes).
-2. Run `./scripts/release.sh <new-version>` to bump `VERSION`, insert the changelog stub, create the release commit, and add an annotated tag.
-3. Update the placeholder notes in `CHANGELOG.md` before sharing the release publicly.
-4. Push the branch and tag (`git push origin HEAD` and `git push origin v<new-version>`).
-5. Publish the GitHub release using the freshly created tag and updated notes.
 
 ### Branch protection for `main` (Status: ✅ Configured)
 
@@ -64,11 +69,12 @@ Branch protection has been configured for the `main` branch with the following s
 - **Required pull request reviews**: ✅ Enabled
   - Reviews required before merging: Yes
   - Dismiss stale reviews: Yes
-  - Require code owner reviews: No
+  - Require code owner reviews: Yes (enforced by `CODEOWNERS` for `scripts/` and `.github/workflows/`)
 
 - **Required status checks**: ✅ Configured
-  - Shell quality checks workflow required
-  - All CI checks must pass before merge
+  - Shell quality checks / Shell quality
+  - Post-release verify / Verify release metadata
+  - Branch must be up to date with `main` before merging
 
 - **Branch restrictions**: ✅ Configured
   - Force pushes: Disabled

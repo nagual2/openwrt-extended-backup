@@ -1,9 +1,15 @@
 {
-  "required_status_checks": null,
+  "required_status_checks": {
+    "strict": true,
+    "contexts": [
+      "Shell quality checks / Shell quality",
+      "Post-release verify / Verify release metadata"
+    ]
+  },
   "required_pull_request_reviews": {
     "required": true,
     "dismiss_stale_reviews": true,
-    "require_code_owner_reviews": false
+    "require_code_owner_reviews": true
   },
   "restrictions": null,
   "enforce_admins": false,
