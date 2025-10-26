@@ -1,0 +1,88 @@
+name: CI
+
+on:
+  pull_request:
+    types:
+      - opened
+      - reopened
+      - synchronize
+      - ready_for_review
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  lint-and-test:
+    name: Lint and test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332 # v4.1.7
+
+      - name: Install system dependencies
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends curl jq ca-certificates
+
+      - name: Install shell tooling
+        run: |
+          set -euo pipefail
+          scripts/ci/install-shell-tools.sh
+
+      - name: Prepare shell file list
+        run: |
+          set -euo pipefail
+          scripts/ci/list-shell-files.sh > shell-files.txt
+          if [ ! -s shell-files.txt ]; then
+            echo "No shell scripts detected."
+          else
+            printf 'Collected %s shell scripts.\n' "$(wc -l < shell-files.txt)"
+          fi
+
+      - name: Run ShellCheck
+        run: |
+          set -euo pipefail
+          if [ ! -s shell-files.txt ]; then
+            echo "No shell scripts detected. Skipping ShellCheck."
+            exit 0
+          fi
+          mapfile -t shell_targets < shell-files.txt
+          shellcheck -s sh --format=gcc --color=auto "${shell_targets[@]}"
+
+      - name: Check formatting with shfmt
+        run: |
+          set -euo pipefail
+          if [ ! -s shell-files.txt ]; then
+            echo "No shell scripts detected. Skipping shfmt."
+            exit 0
+          fi
+          mapfile -t shell_targets < shell-files.txt
+          shfmt -d -i 2 -bn -ci -sr "${shell_targets[@]}"
+
+      - name: Run Bats test suite
+        run: |
+          set -euo pipefail
+          if [ ! -d tests ]; then
+            echo "No tests directory found. Skipping Bats."
+            exit 0
+          fi
+          BATS_LIB_PATH="$PWD/tests/lib" bats --print-output-on-failure --timing tests
+
+      - name: Run shell integration tests
+        run: |
+          set -euo pipefail
+          mapfile -t shell_tests < <(find tests -type f -name '*_test.sh' | sort)
+          if [ "${#shell_tests[@]}" -eq 0 ]; then
+            echo "No standalone shell test scripts found."
+            exit 0
+          fi
+          for script in "${shell_tests[@]}"; do
+            echo "Running ${script}"
+            sh "$script"
+          done

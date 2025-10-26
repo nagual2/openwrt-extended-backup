@@ -1,4 +1,4 @@
-name: Post-release verification
+name: Post-release verify
 
 on:
   release:
@@ -9,8 +9,8 @@ permissions:
   contents: read
 
 jobs:
-  verify-artifacts:
-    name: Verify release artifacts
+  verify-metadata:
+    name: Verify release metadata
     runs-on: ubuntu-latest
     env:
       TAG_NAME: ${{ github.event.release.tag_name }}
@@ -20,6 +20,11 @@ jobs:
         uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332 # v4.1.7
         with:
           ref: ${{ github.event.release.tag_name }}
+
+      - name: Validate release metadata configuration
+        run: |
+          set -euo pipefail
+          scripts/ci/check-post-release.sh
 
       - name: Download release assets
         env:

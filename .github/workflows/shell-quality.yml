@@ -1,0 +1,41 @@
+name: Shell quality checks
+
+on:
+  pull_request:
+    types:
+      - opened
+      - reopened
+      - synchronize
+      - ready_for_review
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  shell-quality:
+    name: Shell quality
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332 # v4.1.7
+
+      - name: Install system dependencies
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends curl jq ca-certificates
+
+      - name: Install shell tooling
+        run: |
+          set -euo pipefail
+          scripts/ci/install-shell-tools.sh
+
+      - name: Run shell quality suite
+        run: |
+          set -euo pipefail
+          scripts/ci/check-shell-quality.sh

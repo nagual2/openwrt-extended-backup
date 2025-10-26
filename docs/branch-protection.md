@@ -8,7 +8,7 @@ The following GitHub Actions workflows must pass before PRs can be merged to mai
 
 - **CI / Lint and test**: Main CI workflow that runs linting, formatting, and tests
 - **Shell quality checks / Shell quality**: Dedicated shell script quality checks
-- **Post-release verification / Verify release artifacts**: Release artifact validation
+- **Post-release verify / Verify release metadata**: Release artifact validation
 
 ## Branch Protection Settings
 
@@ -53,7 +53,7 @@ For branch protection to work correctly, ensure these exact names are used:
 
 1. **CI / Lint and test** - from ci.yml job "lint-and-test"
 2. **Shell quality checks / Shell quality** - from shell-quality.yml job "shell-quality"
-3. **Post-release verification / Verify release artifacts** - from post-release-verify.yml job "verify-artifacts"
+3. **Post-release verify / Verify release metadata** - from post-release-verify.yml job "verify-metadata"
 
 ## Troubleshooting
 
