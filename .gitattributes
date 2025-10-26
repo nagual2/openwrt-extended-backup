@@ -1,0 +1,4 @@
+tools/* binary
+tools/README.md text
+tools/LICENSES/** text
+tools/bats-core/** text

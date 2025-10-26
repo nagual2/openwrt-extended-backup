@@ -24,23 +24,11 @@ jobs:
       - name: Prepare debug artifacts directory
         run: mkdir -p "${CI_DEBUG_DIR}"
 
-      - name: Install dependencies
+      - name: Configure vendored toolchain
         run: |
           set -euo pipefail
-          {
-            sudo apt-get update
-            sudo apt-get install --no-install-recommends -y bats shellcheck curl ca-certificates busybox
-          } 2>&1 | tee "${CI_DEBUG_DIR}/install-dependencies.log"
-
-      - name: Install shfmt
-        env:
-          SHFMT_VERSION: "3.9.2"
-        run: |
-          set -euo pipefail
-          {
-            curl -sSfL "https://github.com/mvdan/sh/releases/download/v${SHFMT_VERSION}/shfmt_v${SHFMT_VERSION}_linux_amd64" -o shfmt
-            sudo install -m 0755 shfmt /usr/local/bin/shfmt
-          } 2>&1 | tee "${CI_DEBUG_DIR}/install-shfmt.log"
+          echo "${GITHUB_WORKSPACE}/tools" >> "$GITHUB_PATH"
+          echo "${GITHUB_WORKSPACE}/tools/bats-core/bin" >> "$GITHUB_PATH"
 
       - name: Discover shell scripts
         shell: bash
@@ -77,11 +65,11 @@ jobs:
           fi
           log="${CI_DEBUG_DIR}/shellcheck.log"
           if [ -f .shellcheckrc ]; then
-            xargs -0 -r shellcheck --config-file ".shellcheckrc" -s sh -- < shell-files.txt 2>&1 | tee "$log"
+            xargs -0 -r tools/shellcheck --config-file ".shellcheckrc" -s sh -- < shell-files.txt 2>&1 | tee "$log"
           else
             {
               echo "Warning: .shellcheckrc not found. Running ShellCheck with default configuration." >&2
-              xargs -0 -r shellcheck -s sh -- < shell-files.txt
+              xargs -0 -r tools/shellcheck -s sh -- < shell-files.txt
             } 2>&1 | tee "$log"
           fi
 
@@ -93,7 +81,7 @@ jobs:
             echo "No shell scripts found. Skipping shfmt."
             exit 0
           fi
-          xargs -0 -r shfmt -d -i 2 -bn -ci -sr -- < shell-files.txt 2>&1 | tee "${CI_DEBUG_DIR}/shfmt.log"
+          xargs -0 -r tools/shfmt -d -i 2 -bn -ci -sr -- < shell-files.txt 2>&1 | tee "${CI_DEBUG_DIR}/shfmt.log"
 
       - name: Run Bats tests
         env:
@@ -105,7 +93,7 @@ jobs:
             echo "tests/ directory not found. Skipping Bats tests."
             exit 0
           fi
-          bats tests 2>&1 | tee "${CI_DEBUG_DIR}/bats.log"
+          tools/bats-core/bin/bats -r tests 2>&1 | tee "${CI_DEBUG_DIR}/bats.log"
 
       - name: Upload debug artifacts
         if: failure()

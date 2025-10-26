@@ -1,11 +1,23 @@
 SHELL := /bin/sh
 .RECIPEPREFIX := >
 
+USE_SYSTEM_TOOLS ?= 0
+TOOLS_DIR := $(CURDIR)/tools
+
+ifeq ($(USE_SYSTEM_TOOLS),1)
 SHFMT ?= shfmt
-SHFMT_FLAGS ?= -i 2 -bn -ci -sr
 SHELLCHECK ?= shellcheck
-SHELLCHECK_FLAGS ?= -s sh
 BATS ?= bats
+else
+SHFMT ?= $(TOOLS_DIR)/shfmt
+SHELLCHECK ?= $(TOOLS_DIR)/shellcheck
+BATS ?= $(TOOLS_DIR)/bats-core/bin/bats
+endif
+
+SHFMT_FLAGS ?= -i 2 -bn -ci -sr
+SHELLCHECK_FLAGS ?= -s sh
+BATS_FLAGS ?= -r
+BATS_SHELL ?= /bin/sh
 
 PKG_NAME := ctoolkit
 PROJECT_VERSION ?=
@@ -71,7 +83,7 @@ lint:
 test:
 > @set -e; \
 > if [ -d tests ]; then \
->     $(BATS) tests; \
+>     BATS_SHELL=$(BATS_SHELL) $(BATS) $(BATS_FLAGS) tests; \
 > else \
 >     echo "tests/ directory not found. Skipping."; \
 > fi
