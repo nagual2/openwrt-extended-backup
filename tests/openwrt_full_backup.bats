@@ -3,21 +3,21 @@
 setup() {
     PROJECT_ROOT=$(cd "$BATS_TEST_DIRNAME/.." 2>/dev/null && pwd)
     SCRIPT_PATH="$PROJECT_ROOT/scripts/openwrt_full_backup"
-<<<<<<< HEAD
 
     PATH_ORIG=$PATH
     TEST_ROOT=$(mktemp -d)
     BIN_DIR="$TEST_ROOT/bin"
     mkdir -p "$BIN_DIR"
-    export PATH="$BIN_DIR:$PATH_ORIG"
+    PATH="$BIN_DIR:$PATH_ORIG"
+    export PATH
 
     REAL_DATE=$(command -v date)
     cat >"$BIN_DIR/date" <<EOF
 #!/bin/sh
-if [ "\$#" -eq 0 ]; then
+if [ "$#" -eq 0 ]; then
     exec "$REAL_DATE"
 fi
-case "\$1" in
+case "$1" in
     '+%Y-%m-%d %H:%M:%S')
         printf '2024-01-01 00:00:00\n'
         ;;
@@ -28,7 +28,7 @@ case "\$1" in
         printf '000000\n'
         ;;
     *)
-        exec "$REAL_DATE" "\$@"
+        exec "$REAL_DATE" "$@"
         ;;
 esac
 EOF
@@ -37,15 +37,15 @@ EOF
     REAL_UNAME=$(command -v uname)
     cat >"$BIN_DIR/uname" <<EOF
 #!/bin/sh
-if [ "\$#" -gt 0 ]; then
-    case "\$1" in
+if [ "$#" -gt 0 ]; then
+    case "$1" in
         -n)
             printf 'TestRouter\n'
             exit 0
             ;;
     esac
 fi
-exec "$REAL_UNAME" "\$@"
+exec "$REAL_UNAME" "$@"
 EOF
     chmod +x "$BIN_DIR/uname"
 
@@ -100,7 +100,6 @@ EOF
     export OVERLAY_SOURCE="$OVERLAY_DIR"
 
     OUT_DIR="$TEST_ROOT/out"
-    mkdir -p "$OUT_DIR"
     EXPECTED_ARCHIVE="$OUT_DIR/fullbackup_TestRouter_2024-01-01_00-00-00.tar.gz"
 }
 
@@ -109,6 +108,20 @@ teardown() {
     rm -rf "$TEST_ROOT"
     unset MOCK_UPLOAD_LOG MOCK_SFTP_BATCH_LOG MOCK_UPLOAD_FAIL_LIMIT \
         MOCK_UPLOAD_FAIL_FILE MOCK_UPLOAD_FAIL_CODE MOCK_UPLOAD_EXIT_CODE
+}
+
+mock_tar_setup() {
+    MOCK_TAR_DIR="$TEST_ROOT/mock-tar"
+    mkdir -p "$MOCK_TAR_DIR"
+    MOCK_TAR_MARKER="$TEST_ROOT/tar-invoked"
+    rm -f "$MOCK_TAR_MARKER"
+    cat >"$MOCK_TAR_DIR/tar" <<EOF
+#!/bin/sh
+touch "$MOCK_TAR_MARKER"
+printf 'mock tar executed\n' >&2
+exit 1
+EOF
+    chmod +x "$MOCK_TAR_DIR/tar"
 }
 
 @test "scp upload invokes scp with provided options" {
@@ -122,9 +135,9 @@ teardown() {
         --upload "scp://backup@example.com:/remote/archive.tar.gz" \
         --identity "$identity" \
         --known-hosts "$known_hosts" \
-        --port 2022 \
+        --ssh-port 2022 \
         --retry 1 \
-        --out-dir "$OUT_DIR" \
+        --output "$OUT_DIR" \
         --export=scp
 
     [ "$status" -eq 0 ]
@@ -137,7 +150,7 @@ teardown() {
     [[ "$command_logged" == *"UserKnownHostsFile=$known_hosts"* ]]
     [[ "$command_logged" == *"StrictHostKeyChecking=yes"* ]]
     [[ "$command_logged" == *"$EXPECTED_ARCHIVE"* ]]
-    [[ "$command_logged" == *"backup@example.com:'/remote/archive.tar.gz'"* ]]
+    [[ "$command_logged" == *"backup@example.com:/remote/archive.tar.gz"* ]]
 }
 
 @test "sftp upload writes batch file" {
@@ -146,7 +159,7 @@ teardown() {
 
     run "$SCRIPT_PATH" \
         --upload "sftp://backup@example.com:/remote/archive.tar.gz" \
-        --out-dir "$OUT_DIR" \
+        --output "$OUT_DIR" \
         --export=local
 
     [ "$status" -eq 0 ]
@@ -169,7 +182,7 @@ teardown() {
 
     run "$SCRIPT_PATH" \
         --upload "scp://backup@example.com:/remote/archive.tar.gz" \
-        --out-dir "$OUT_DIR" \
+        --output "$OUT_DIR" \
         --retry 2 \
         --export=local
 
@@ -188,7 +201,7 @@ teardown() {
 
     run "$SCRIPT_PATH" \
         --upload "scp://backup@example.com:/remote/archive.tar.gz" \
-        --out-dir "$OUT_DIR" \
+        --output "$OUT_DIR" \
         --retry 2 \
         --export=local
 
@@ -203,40 +216,19 @@ teardown() {
 
     run "$SCRIPT_PATH" \
         --upload "scp://backup@example.com:/remote/archive.tar.gz" \
-        --out-dir "$OUT_DIR" \
+        --output "$OUT_DIR" \
         --export=scp \
         --dry-run
 
     [ "$status" -eq 0 ]
     [ ! -f "$EXPECTED_ARCHIVE" ]
+    [ ! -d "$OUT_DIR" ]
     if [ -e "$MOCK_UPLOAD_LOG" ]; then
         [ ! -s "$MOCK_UPLOAD_LOG" ]
     fi
 
     [[ "$output" == *"Режим dry-run: готовая команда SCP"* ]]
     [[ "$output" == *"/remote/archive.tar.gz"* ]]
-=======
-    MOCK_BIN="$BATS_TEST_TMPDIR/bin"
-    mkdir -p "$MOCK_BIN"
-
-    cat >"$MOCK_BIN/tar" <<EOF
-#!/bin/sh
-touch "$BATS_TEST_TMPDIR/tar-invoked"
-printf 'mock tar executed\n' >&2
-exit 1
-EOF
-    chmod +x "$MOCK_BIN/tar"
-
-    PATH_ORIGINAL=$PATH
-    PATH="$MOCK_BIN:$PATH_ORIGINAL"
-    export PATH
-
-    rm -f "$BATS_TEST_TMPDIR/tar-invoked"
-}
-
-teardown() {
-    PATH=$PATH_ORIGINAL
-    export PATH
 }
 
 @test "usage mentions dry-run and output options" {
@@ -247,35 +239,43 @@ teardown() {
 }
 
 @test "dry-run flag avoids side effects" {
-    rm -f "$BATS_TEST_TMPDIR/tar-invoked"
-    output_dir="$BATS_TEST_TMPDIR/custom-output"
-    run "$SCRIPT_PATH" -n --output "$output_dir"
+    mock_tar_setup
+    output_dir="$TEST_ROOT/custom-output"
+    PATH_WITH_MOCK="$MOCK_TAR_DIR:$PATH"
+
+    run env PATH="$PATH_WITH_MOCK" "$SCRIPT_PATH" -n --output "$output_dir"
+
     [ "$status" -eq 0 ]
     [[ "$output" == *"Режим dry-run: действия выполняются без побочных эффектов"* ]]
     [[ "$output" == *"Режим dry-run: архив не создавался"* ]]
     [[ "$output" == *"$output_dir"* ]]
-    [ ! -f "$BATS_TEST_TMPDIR/tar-invoked" ]
+    [ ! -f "$MOCK_TAR_MARKER" ]
     [ ! -d "$output_dir" ]
 }
 
 @test "DRY_RUN environment variable enables dry-run" {
-    rm -f "$BATS_TEST_TMPDIR/tar-invoked"
-    output_dir="$BATS_TEST_TMPDIR/env-output"
-    run env DRY_RUN=true "$SCRIPT_PATH" --output "$output_dir"
+    mock_tar_setup
+    output_dir="$TEST_ROOT/env-output"
+    PATH_WITH_MOCK="$MOCK_TAR_DIR:$PATH"
+
+    run env DRY_RUN=true PATH="$PATH_WITH_MOCK" "$SCRIPT_PATH" --output "$output_dir"
+
     [ "$status" -eq 0 ]
     [[ "$output" == *"Режим dry-run: архив не создавался"* ]]
-    [ ! -f "$BATS_TEST_TMPDIR/tar-invoked" ]
+    [ ! -f "$MOCK_TAR_MARKER" ]
     [ ! -d "$output_dir" ]
 }
 
 @test "--output accepts relative paths" {
-    rm -f "$BATS_TEST_TMPDIR/tar-invoked"
+    mock_tar_setup
+    PATH_WITH_MOCK="$MOCK_TAR_DIR:$PATH"
     rm -rf relative-dir
     expected="$(pwd)/relative-dir"
-    run env DRY_RUN=1 "$SCRIPT_PATH" --output relative-dir
+
+    run env DRY_RUN=1 PATH="$PATH_WITH_MOCK" "$SCRIPT_PATH" --output relative-dir
+
     [ "$status" -eq 0 ]
     [[ "$output" == *"$expected"* ]]
-    [ ! -f "$BATS_TEST_TMPDIR/tar-invoked" ]
+    [ ! -f "$MOCK_TAR_MARKER" ]
     [ ! -d "$expected" ]
->>>>>>> origin/feat-5-backup-dry-run-output-tests
 }
