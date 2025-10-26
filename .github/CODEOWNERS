@@ -1,3 +1,0 @@
-# Assign maintainers to critical automation paths so reviews are required.
-/scripts/ @nagual2
-/.github/workflows/ @nagual2

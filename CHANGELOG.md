@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-The release workflow is driven by [release-please](https://github.com/googleapis/release-please) and will update this changelog automatically.
+Tagged releases are published via GitHub Actions and update this changelog alongside the release artifacts.
 
 ## [0.8.3](https://github.com/nagual2/openwrt-extended-backup/compare/v0.8.2...v0.8.3) (2025-10-24)
 

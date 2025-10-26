@@ -34,13 +34,17 @@ jobs:
             exit 1
           fi
           VERSION="${TAG#v}"
-          if [[ ! -f VERSION ]]; then
-            echo "VERSION file is missing." >&2
+          if [[ ! -f CHANGELOG.md ]]; then
+            echo "CHANGELOG.md is missing." >&2
             exit 1
           fi
-          FILE_VERSION="$(tr -d '\n\r ' < VERSION)"
-          if [[ "${FILE_VERSION}" != "${VERSION}" ]]; then
-            echo "VERSION file (${FILE_VERSION}) does not match tag version (${VERSION})." >&2
+          CHANGELOG_VERSION="$(awk '/^## \[[0-9]+\.[0-9]+\.[0-9]+\]/ { line = $0; sub(/^## \[/, "", line); sub(/\].*$/, "", line); print line; exit }' CHANGELOG.md)"
+          if [[ -z "${CHANGELOG_VERSION}" ]]; then
+            echo "Unable to determine the current version from CHANGELOG.md." >&2
+            exit 1
+          fi
+          if [[ "${CHANGELOG_VERSION}" != "${VERSION}" ]]; then
+            echo "CHANGELOG.md top entry (${CHANGELOG_VERSION}) does not match tag version (${VERSION})." >&2
             exit 1
           fi
           echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
@@ -58,31 +62,25 @@ jobs:
           set -euo pipefail
           VERSION="${{ steps.prep.outputs.version }}"
           ARCHIVE_NAME="openwrt-extended-backup-${VERSION}"
-          mkdir -p "dist/${ARCHIVE_NAME}/scripts"
-          ROOT_SCRIPTS=(openwrt_full_backup openwrt_full_restore user_installed_packages)
-          for script in "${ROOT_SCRIPTS[@]}"; do
-            if [[ ! -f "${script}" ]]; then
-              echo "Missing root-level script: ${script}" >&2
-              exit 1
-            fi
-            cp "${script}" "dist/${ARCHIVE_NAME}/"
-            if [[ ! -f "scripts/${script}" ]]; then
-              echo "Missing scripts/${script}" >&2
-              exit 1
-            fi
-            cp "scripts/${script}" "dist/${ARCHIVE_NAME}/scripts/"
-          done
-          DOCS=(README.md CHANGELOG.md)
-          for doc in "${DOCS[@]}"; do
-            if [[ ! -f "${doc}" ]]; then
-              echo "Missing documentation file: ${doc}" >&2
-              exit 1
-            fi
-            cp "${doc}" "dist/${ARCHIVE_NAME}/"
-          done
-          if [[ -f LICENSE ]]; then
-            cp LICENSE "dist/${ARCHIVE_NAME}/"
+          ARCHIVE_ROOT="dist/${ARCHIVE_NAME}"
+          mkdir -p dist
+          rm -rf "${ARCHIVE_ROOT}"
+          mkdir -p "${ARCHIVE_ROOT}"
+          if [[ ! -d scripts ]]; then
+            echo "scripts/ directory is missing." >&2
+            exit 1
           fi
+          cp -R scripts "${ARCHIVE_ROOT}/"
+          if [[ ! -f README.md ]] || [[ ! -f CHANGELOG.md ]]; then
+            echo "README.md or CHANGELOG.md is missing." >&2
+            exit 1
+          fi
+          cp README.md "${ARCHIVE_ROOT}/"
+          cp CHANGELOG.md "${ARCHIVE_ROOT}/"
+          if [[ -f LICENSE ]]; then
+            cp LICENSE "${ARCHIVE_ROOT}/"
+          fi
+          printf '%s\n' "${VERSION}" > "${ARCHIVE_ROOT}/VERSION"
           tar -C dist -czf "dist/${ARCHIVE_NAME}.tar.gz" "${ARCHIVE_NAME}"
           (cd dist && zip -9 -r "${ARCHIVE_NAME}.zip" "${ARCHIVE_NAME}")
           (cd dist && sha256sum "${ARCHIVE_NAME}.tar.gz" "${ARCHIVE_NAME}.zip" > SHA256SUMS)
