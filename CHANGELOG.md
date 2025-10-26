@@ -61,4 +61,5 @@ Tagged releases are published via GitHub Actions and update this changelog along
 ### Changed
 
 - **backup:** simplify CLI to core flags, add safer tar creation, and make SMB export optional by default.
+- **user_installed_packages:** refactor status parsing with opkg fallback, stricter filtering, excludes, and new output file option.
 

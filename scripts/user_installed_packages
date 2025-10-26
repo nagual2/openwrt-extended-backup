@@ -3,7 +3,6 @@
 
 set -eu
 
-PROGRAM=$(basename "$0")
 SCRIPT_PATH=$0
 
 case "$SCRIPT_PATH" in
@@ -21,62 +20,22 @@ case "$SCRIPT_PATH" in
 esac
 
 if ! SCRIPT_DIR=$(cd "$SCRIPT_SOURCE" 2>/dev/null && pwd); then
-    printf '%s: unable to determine script directory\n' "$PROGRAM" >&2
+    printf '%s: unable to determine script directory\n' "$(basename "$0")" >&2
     exit 1
 fi
-PROJECT_ROOT=$(dirname "$SCRIPT_DIR")
-VERSION_FILE="${PROJECT_ROOT}/VERSION"
-SHARE_VERSION_FILE='/usr/share/openwrt-extended-backup/VERSION'
-CHANGELOG_FILE="${PROJECT_ROOT}/CHANGELOG.md"
-VERSION_FALLBACK='0.0.0'
-VERSION=''
 
-read_version_from_changelog() {
-    file=$1
-    if [ ! -r "$file" ]; then
-        return 0
-    fi
+# shellcheck source=lib/common.sh
+. "$SCRIPT_DIR/lib/common.sh"
 
-    awk '
-        /^## \[[0-9]+\.[0-9]+\.[0-9]+\]/ {
-            line = $0
-            sub(/^## \[/, "", line)
-            sub(/\].*$/, "", line)
-            print line
-            exit
-        }
-    ' "$file"
-}
+common_init "$0"
 
-if [ -r "$VERSION_FILE" ]; then
-    VERSION=$(head -n 1 "$VERSION_FILE")
-elif [ -r "$SHARE_VERSION_FILE" ]; then
-    VERSION=$(head -n 1 "$SHARE_VERSION_FILE")
-else
-    changelog_version=$(read_version_from_changelog "$CHANGELOG_FILE")
-    if [ -n "$changelog_version" ]; then
-        VERSION=$changelog_version
-    fi
-fi
-
-if [ -z "$VERSION" ]; then
-    VERSION=$VERSION_FALLBACK
-fi
-
-EX_OK=0
-EX_USAGE=64
-EX_UNAVAILABLE=69
-EX_SOFTWARE=70
-
-DEFAULT_STATUS_FILE='/usr/lib/opkg/status'
+DEFAULT_STATUS_FILE=${DEFAULT_STATUS_FILE:-'/usr/lib/opkg/status'}
 STATUS_FILE=$DEFAULT_STATUS_FILE
+STATUS_FILE_IS_CUSTOM=0
 USER_INSTALLED_FILE=''
 INCLUDE_AUTO_DEPS=0
+OUTPUT_PATH=''
 EXCLUDE_PATTERNS=''
-
-show_version() {
-    printf '%s version %s\n' "$PROGRAM" "$VERSION"
-}
 
 usage() {
     cat <<EOF
@@ -86,7 +45,8 @@ usage() {
       --status-file PATH         Использовать альтернативный status-файл opkg (по умолчанию $DEFAULT_STATUS_FILE)
       --user-installed-file PATH Добавить пакеты из произвольного списка (по одному имени на строку)
   -x, --exclude PATTERN          Исключить пакеты по шаблону (опцию можно указать несколько раз)
-      --include-auto-deps        Включить зависимости с Auto-Installed: yes
+      --include-auto-deps[=BOOL] Включить зависимости с Auto-Installed: yes
+      --output PATH              Записать результат в файл вместо stdout (используйте - для stdout)
   -h, --help                     Показать эту справку и выйти
   -V, --version                  Показать версию и выйти
 EOF
@@ -125,7 +85,7 @@ should_exclude() {
         if [ -z "$pattern" ]; then
             continue
         fi
-        # shellcheck disable=SC2254 # patterns are treated as glob expressions for matching
+        # shellcheck disable=SC2254
         case "$pkg" in
             $pattern)
                 IFS=$old_ifs
@@ -139,13 +99,14 @@ should_exclude() {
 
 parse_args() {
     while [ $# -gt 0 ]; do
-        case "$1" in
+        arg=$1
+        case "$arg" in
             -h | --help)
                 usage
                 exit "$EX_OK"
                 ;;
             -V | --version)
-                show_version
+                common_print_version
                 exit "$EX_OK"
                 ;;
             --status-file)
@@ -153,10 +114,12 @@ parse_args() {
                     fatal 'Опция --status-file требует указать путь' "$EX_USAGE"
                 fi
                 STATUS_FILE=$2
+                STATUS_FILE_IS_CUSTOM=1
                 shift
                 ;;
             --status-file=*)
-                STATUS_FILE=${1#--status-file=}
+                STATUS_FILE=${arg#--status-file=}
+                STATUS_FILE_IS_CUSTOM=1
                 ;;
             --user-installed-file)
                 if [ $# -lt 2 ]; then
@@ -166,7 +129,7 @@ parse_args() {
                 shift
                 ;;
             --user-installed-file=*)
-                USER_INSTALLED_FILE=${1#--user-installed-file=}
+                USER_INSTALLED_FILE=${arg#--user-installed-file=}
                 ;;
             -x)
                 if [ $# -lt 2 ]; then
@@ -183,119 +146,142 @@ parse_args() {
                 shift
                 ;;
             --exclude=*)
-                append_exclude_pattern "${1#--exclude=}"
+                append_exclude_pattern "${arg#--exclude=}"
                 ;;
             --include-auto-deps)
                 INCLUDE_AUTO_DEPS=1
                 ;;
             --include-auto-deps=*)
-                value=${1#--include-auto-deps=}
-                case "$value" in
-                    '' | 0 | false | no | off)
-                        INCLUDE_AUTO_DEPS=0
-                        ;;
-                    *)
-                        INCLUDE_AUTO_DEPS=1
-                        ;;
-                esac
+                value=${arg#--include-auto-deps=}
+                INCLUDE_AUTO_DEPS=$(common_to_bool "$value")
+                ;;
+            --output)
+                if [ $# -lt 2 ]; then
+                    fatal 'Опция --output требует указать путь' "$EX_USAGE"
+                fi
+                OUTPUT_PATH=$2
+                shift
+                ;;
+            --output=*)
+                OUTPUT_PATH=${arg#--output=}
                 ;;
             *)
-                fatal "Неизвестная опция: $1" "$EX_USAGE"
+                fatal "Неизвестная опция: $arg" "$EX_USAGE"
                 ;;
         esac
         shift
     done
 }
 
-parse_args "$@"
-
-if [ -z "$STATUS_FILE" ]; then
-    fatal 'Путь к status-файлу не указан' "$EX_USAGE"
-fi
-
-if [ ! -r "$STATUS_FILE" ]; then
-    fatal "Не удалось прочитать status-файл: $STATUS_FILE" "$EX_UNAVAILABLE"
-fi
-
-if [ -n "$USER_INSTALLED_FILE" ] && [ ! -r "$USER_INSTALLED_FILE" ]; then
-    fatal "Не удалось прочитать список вручную установленных пакетов: $USER_INSTALLED_FILE" "$EX_UNAVAILABLE"
-fi
-
-DISTRI_TIME=$(awk '
-    /^Installed-Time:[[:space:]]*/ {
-        val = $2 + 0
-        if (val > 0 && (min == 0 || val < min)) {
-            min = val
-        }
-    }
-    END {
-        if (min > 0) {
-            print min
-        }
-    }
-' "$STATUS_FILE")
-
-if [ -z "$DISTRI_TIME" ]; then
-    DISTRI_TIME=0
-fi
-
-STATUS_PACKAGES=$(awk -v include_auto="$INCLUDE_AUTO_DEPS" -v min_time="$DISTRI_TIME" '
-    function trim(str) {
-        gsub(/^[[:space:]]+/, "", str)
-        gsub(/[[:space:]]+$/, "", str)
-        return str
-    }
-    function is_user_status(val) {
-        if (val ~ /(^|[[:space:]])user([[:space:]]|$)/) {
-            return 1
-        }
-        if (val ~ /(^|[[:space:]])hold([[:space:]]|$)/) {
-            return 1
-        }
-        return 0
-    }
-    BEGIN {
-        RS=""
-        FS="\n"
-        min_value = min_time + 0
-    }
-    {
-        pkg=""
-        status=""
-        auto=""
-        installed_time=0
-        for (i = 1; i <= NF; i++) {
-            line = $i
-            if (line ~ /^Package:[[:space:]]/) {
-                pkg = trim(substr(line, 10))
-            } else if (line ~ /^Status:[[:space:]]/) {
-                status = trim(substr(line, 9))
-            } else if (line ~ /^Auto-Installed:[[:space:]]/) {
-                auto = trim(substr(line, 17))
-            } else if (line ~ /^Installed-Time:[[:space:]]/) {
-                installed_time = trim(substr(line, 17)) + 0
+read_distribution_time() {
+    file=$1
+    awk '
+        /^Installed-Time:[[:space:]]*/ {
+            val = $2 + 0
+            if (val > 0 && (min == 0 || val < min)) {
+                min = val
             }
         }
-        if (pkg == "" || !is_user_status(status)) {
-            next
+        END {
+            if (min > 0) {
+                print min
+            }
         }
-        if (min_value > 0 && installed_time == min_value) {
-            next
-        }
-        auto_flag = 0
-        if (auto ~ /^[Yy][Ee][Ss]/) {
-            auto_flag = 1
-        }
-        if (!include_auto && auto_flag) {
-            next
-        }
-        print pkg
-    }
-' "$STATUS_FILE" | sort -u)
+    ' "$file"
+}
 
-USER_PACKAGES=''
-if [ -n "$USER_INSTALLED_FILE" ]; then
-    USER_PACKAGES=$(awk '
+collect_status_packages() {
+    file=$1
+    include_auto=$2
+    min_time=$3
+
+    awk -v include_auto="$include_auto" -v min_time="$min_time" '
+        function trim(str) {
+            gsub(/^[[:space:]]+/, "", str)
+            gsub(/[[:space:]]+$/, "", str)
+            return str
+        }
+        function has_token(field, token) {
+            pattern = "(^|[[:space:]])" token "([[:space:]]|$)"
+            if (field ~ pattern) {
+                return 1
+            }
+            return 0
+        }
+        BEGIN {
+            RS=""
+            FS="\n"
+            include_flag = include_auto + 0
+            reference_time = min_time + 0
+        }
+        {
+            name=""
+            status=""
+            auto=""
+            installed_time=0
+            for (i = 1; i <= NF; i++) {
+                line = $i
+                if (line ~ /^[[:space:]]/) {
+                    continue
+                }
+                colon = index(line, ":")
+                if (colon == 0) {
+                    continue
+                }
+                key = substr(line, 1, colon - 1)
+                value = substr(line, colon + 1)
+                value = trim(value)
+                if (key == "Package") {
+                    name = value
+                } else if (key == "Status") {
+                    status = value
+                } else if (key == "Auto-Installed") {
+                    auto = value
+                } else if (key == "Installed-Time") {
+                    installed_time = value + 0
+                }
+            }
+            if (name == "") {
+                next
+            }
+            if (!has_token(status, "install")) {
+                next
+            }
+            if (!has_token(status, "user") && !has_token(status, "hold")) {
+                next
+            }
+            auto_flag = 0
+            auto_val = tolower(auto)
+            if (auto_val == "yes" || auto_val == "true" || auto_val == "1") {
+                auto_flag = 1
+            }
+            if (include_flag == 0 && auto_flag == 1) {
+                next
+            }
+            if (reference_time > 0 && installed_time == reference_time) {
+                next
+            }
+            print name
+        }
+    ' "$file"
+}
+
+collect_opkg_installed() {
+    require_cmd opkg
+    set +e
+    opkg_output=$(opkg list-installed)
+    status=$?
+    set -e
+    if [ "$status" -ne 0 ]; then
+        return "$status"
+    fi
+    printf '%s\n' "$opkg_output"
+    return 0
+}
+
+read_user_packages() {
+    file=$1
+    awk '
         {
             gsub(/\r$/, "")
             sub(/[[:space:]]*#.*$/, "")
@@ -305,17 +291,88 @@ if [ -n "$USER_INSTALLED_FILE" ]; then
                 print $0
             }
         }
-    ' "$USER_INSTALLED_FILE" | sort -u)
+    ' "$file"
+}
+
+generate_report() {
+    printf '# user-installed opkg packages (%d)\n' "$TOTAL_COUNT"
+    printf '# main packages (%d)\n' "$MAIN_COUNT"
+    if [ "$MAIN_COUNT" -gt 0 ]; then
+        printf '%s\n' "$MAIN_LINES"
+    fi
+    printf '\n'
+    if [ "$LUCI_COUNT" -gt 0 ]; then
+        printf '# LuCI translations (%d)\n' "$LUCI_COUNT"
+        printf '%s\n' "$LUCI_LINES"
+        printf '\n'
+    fi
+    printf 'opkg update\n'
+    if [ "$MAIN_COUNT" -gt 0 ]; then
+        printf 'opkg install %s\n' "$MAIN_ARGS"
+    fi
+    if [ "$LUCI_COUNT" -gt 0 ]; then
+        printf 'opkg install %s\n' "$LUCI_ARGS"
+    fi
+}
+
+parse_args "$@"
+
+if [ -z "$STATUS_FILE" ]; then
+    fatal 'Путь к status-файлу не указан' "$EX_USAGE"
 fi
 
-COMBINED_PACKAGES=$({
-    if [ -n "$STATUS_PACKAGES" ]; then
-        printf '%s\n' "$STATUS_PACKAGES"
+if [ -n "$USER_INSTALLED_FILE" ] && [ ! -r "$USER_INSTALLED_FILE" ]; then
+    fatal "Не удалось прочитать список вручную установленных пакетов: $USER_INSTALLED_FILE" "$EX_UNAVAILABLE"
+fi
+
+STATUS_PACKAGES=''
+STATUS_SOURCE='status'
+DISTRI_TIME=0
+
+if [ -r "$STATUS_FILE" ]; then
+    DISTRI_TIME=$(read_distribution_time "$STATUS_FILE")
+    if [ -z "$DISTRI_TIME" ]; then
+        DISTRI_TIME=0
     fi
-    if [ -n "$USER_PACKAGES" ]; then
-        printf '%s\n' "$USER_PACKAGES"
+    STATUS_PACKAGES=$(collect_status_packages "$STATUS_FILE" "$INCLUDE_AUTO_DEPS" "$DISTRI_TIME" | LC_ALL=C sort -u)
+else
+    if [ "$STATUS_FILE_IS_CUSTOM" -eq 1 ]; then
+        fatal "Не удалось прочитать status-файл: $STATUS_FILE" "$EX_UNAVAILABLE"
     fi
-} | awk 'NF' | sort -u)
+    STATUS_SOURCE='opkg'
+fi
+
+if [ "$STATUS_SOURCE" != 'status' ]; then
+    if ! OPKG_LIST=$(collect_opkg_installed); then
+        fatal 'Не удалось получить список пакетов через opkg' "$EX_UNAVAILABLE"
+    fi
+    STATUS_PACKAGES=$(printf '%s\n' "$OPKG_LIST" | awk -F' - ' '
+        {
+            name = $1
+            gsub(/^[[:space:]]+/, "", name)
+            gsub(/[[:space:]]+$/, "", name)
+            if (name != "") {
+                print name
+            }
+        }
+    ' | LC_ALL=C sort -u)
+fi
+
+USER_PACKAGES=''
+if [ -n "$USER_INSTALLED_FILE" ]; then
+    USER_PACKAGES=$(read_user_packages "$USER_INSTALLED_FILE" | LC_ALL=C sort -u)
+fi
+
+COMBINED_PACKAGES=$(
+    {
+        if [ -n "$STATUS_PACKAGES" ]; then
+            printf '%s\n' "$STATUS_PACKAGES"
+        fi
+        if [ -n "$USER_PACKAGES" ]; then
+            printf '%s\n' "$USER_PACKAGES"
+        fi
+    } | awk 'NF' | LC_ALL=C sort -u
+)
 
 MAIN_LINES=''
 MAIN_ARGS=''
@@ -365,21 +422,10 @@ fi
 
 TOTAL_COUNT=$((MAIN_COUNT + LUCI_COUNT))
 
-printf '# user-installed opkg packages (%d)\n' "$TOTAL_COUNT"
-printf '# main packages (%d)\n' "$MAIN_COUNT"
-if [ "$MAIN_COUNT" -gt 0 ]; then
-    printf '%s\n' "$MAIN_LINES"
-fi
-printf '\n'
-if [ "$LUCI_COUNT" -gt 0 ]; then
-    printf '# LuCI translations (%d)\n' "$LUCI_COUNT"
-    printf '%s\n' "$LUCI_LINES"
-    printf '\n'
-fi
-printf 'opkg update\n'
-if [ "$MAIN_COUNT" -gt 0 ]; then
-    printf 'opkg install %s\n' "$MAIN_ARGS"
-fi
-if [ "$LUCI_COUNT" -gt 0 ]; then
-    printf 'opkg install %s\n' "$LUCI_ARGS"
+if [ -n "$OUTPUT_PATH" ] && [ "$OUTPUT_PATH" != '-' ]; then
+    if ! generate_report >"$OUTPUT_PATH"; then
+        fatal "Не удалось записать в файл: $OUTPUT_PATH" "$EX_SOFTWARE"
+    fi
+else
+    generate_report
 fi
