@@ -11,3 +11,6 @@ build/
 dist/
 reports/
 *.ipk
+
+# E2E runtime artifacts
+tests/e2e/artifacts/
