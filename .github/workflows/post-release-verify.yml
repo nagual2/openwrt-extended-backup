@@ -1,6 +1,7 @@
-name: Post-release verification
+name: Post-release verify
 
 on:
+  pull_request:
   release:
     types:
       - published
@@ -9,19 +10,27 @@ permissions:
   contents: read
 
 jobs:
-  verify-artifacts:
-    name: Verify release artifacts
+  post-release-verify:
+    name: Verify release metadata
     runs-on: ubuntu-latest
     env:
-      TAG_NAME: ${{ github.event.release.tag_name }}
-      ARCHIVE_PREFIX: openwrt-toolkit-${{ github.event.release.tag_name }}
+      TAG_NAME: ${{ github.event.release.tag_name || '' }}
+
     steps:
+      - name: Skip release verification for pull requests
+        if: github.event_name == 'pull_request'
+        run: |
+          echo "Release verification checks are skipped for pull requests."
+
       - name: Checkout repository
+        if: github.event_name != 'pull_request'
         uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332 # v4.1.7
         with:
+          fetch-depth: 0
           ref: ${{ github.event.release.tag_name }}
 
       - name: Download release assets
+        if: github.event_name != 'pull_request'
         env:
           GH_TOKEN: ${{ github.token }}
           GITHUB_TOKEN: ${{ github.token }}
@@ -32,8 +41,10 @@ jobs:
           ls -al release-assets
 
       - name: Verify checksums
+        if: github.event_name != 'pull_request'
         run: |
           set -euo pipefail
+          ARCHIVE_PREFIX="openwrt-toolkit-${TAG_NAME}"
           cd release-assets
           if [ ! -f "SHA256SUMS" ]; then
               echo "Missing SHA256SUMS asset" >&2
@@ -50,15 +61,19 @@ jobs:
           sha256sum --check SHA256SUMS
 
       - name: Extract release archives
+        if: github.event_name != 'pull_request'
         run: |
           set -euo pipefail
+          ARCHIVE_PREFIX="openwrt-toolkit-${TAG_NAME}"
           mkdir -p extracted/tar extracted/zip
           tar -xzf "release-assets/${ARCHIVE_PREFIX}.tar.gz" -C extracted/tar
           unzip -q "release-assets/${ARCHIVE_PREFIX}.zip" -d extracted/zip
 
       - name: Run script help commands
+        if: github.event_name != 'pull_request'
         run: |
           set -euo pipefail
+          ARCHIVE_PREFIX="openwrt-toolkit-${TAG_NAME}"
           TAR_SCRIPTS="extracted/tar/${ARCHIVE_PREFIX}/scripts"
           ZIP_SCRIPTS="extracted/zip/${ARCHIVE_PREFIX}/scripts"
           for dir in "$TAR_SCRIPTS" "$ZIP_SCRIPTS"; do
@@ -72,8 +87,10 @@ jobs:
           done
 
       - name: Verify version file
+        if: github.event_name != 'pull_request'
         run: |
           set -euo pipefail
+          ARCHIVE_PREFIX="openwrt-toolkit-${TAG_NAME}"
           VERSION_FILE="extracted/tar/${ARCHIVE_PREFIX}/VERSION"
           if [ ! -f "$VERSION_FILE" ]; then
               echo "VERSION file not found in tar archive" >&2
@@ -86,8 +103,10 @@ jobs:
           fi
 
       - name: Smoke test user_installed_packages
+        if: github.event_name != 'pull_request'
         run: |
           set -euo pipefail
+          ARCHIVE_PREFIX="openwrt-toolkit-${TAG_NAME}"
           SCRIPT_PATH="extracted/tar/${ARCHIVE_PREFIX}/scripts/user_installed_packages"
           if [ ! -f "$SCRIPT_PATH" ]; then
               echo "user_installed_packages script not found in tar archive" >&2
@@ -101,3 +120,9 @@ jobs:
           trap 'rm -f "$TMP_OUTPUT"' EXIT
           "$SCRIPT_PATH" --status-file "$STATUS_FILE" --user-installed-file "$USER_LIST" >"$TMP_OUTPUT"
           diff -u "$EXPECTED_OUTPUT" "$TMP_OUTPUT"
+
+      - name: Validate release metadata configuration
+        if: github.event_name != 'pull_request'
+        run: |
+          set -euo pipefail
+          ./scripts/ci/check-post-release.sh

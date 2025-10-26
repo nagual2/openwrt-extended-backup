@@ -24,7 +24,7 @@ Use lowercase words separated by hyphens for the `<short-topic>` part (for examp
 2. Make your changes and run `./scripts/ci/check-shell-quality.sh` locally.
 3. Push the branch to your fork (or the main repository if you have access) and open a pull request targeting `main`.
 4. Wait for the required checks to succeed:
-   - **Shell quality checks / Shell quality**;
+   - **Shell quality checks / shell-quality**;
    - **Post-release verify / Verify release metadata**.
 5. Address review feedback. Changes to `scripts/` and `.github/workflows/` automatically request a maintainer review via `CODEOWNERS`.
 6. Merge only after the pull request is approved and all checks are green. Force pushes to `main` are blocked, so use the merge button once CI is finished.
@@ -53,7 +53,7 @@ Before opening a pull request:
 ### Required status checks
 
 The repository enforces the following GitHub Actions. Pull requests must be green on all of them before merge:
-- **Shell quality checks / Shell quality**
+- **Shell quality checks / shell-quality**
 - **Post-release verify / Verify release metadata**
 
 If new checks are added in the future, include them here so contributors know what is expected.
@@ -72,7 +72,7 @@ Branch protection has been configured for the `main` branch with the following s
   - Require code owner reviews: Yes (enforced by `CODEOWNERS` for `scripts/` and `.github/workflows/`)
 
 - **Required status checks**: ✅ Configured
-  - Shell quality checks / Shell quality
+  - Shell quality checks / shell-quality
   - Post-release verify / Verify release metadata
   - Branch must be up to date with `main` before merging
 

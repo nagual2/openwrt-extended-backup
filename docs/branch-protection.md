@@ -9,7 +9,7 @@ The following branch protection settings have been configured for the `main` bra
   - Require code owner reviews: Yes (maintainers are assigned via `CODEOWNERS` for `scripts/` and `.github/workflows/`)
 
 - **Required status checks**: ✅ Configured
-  - Shell quality checks / Shell quality
+  - Shell quality checks / shell-quality
   - Post-release verify / Verify release metadata
   - Branch must be up to date with `main` before merging
 
