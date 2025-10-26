@@ -16,8 +16,8 @@
 ## Основные возможности
 - `openwrt_full_backup`
   - Архивирует весь пользовательский слой (`/overlay`) с сохранением прав и владельцев.
-  - По умолчанию выводит команду `scp` для скачивания архива и поддерживает `--emit-scp-cmd` для интеграции в автоматизацию.
-  - Управляется через флаг `--export` (`scp`, `local`, `smb`), а также предоставляет флаги `--ssh-host`, `--ssh-port`, `--ssh-user`, `--out-dir`, `--emit-scp-cmd`, `-q` и `-v` для настройки поведения.
+  - По умолчанию выполняет удалённую выгрузку через SCP: после создания архива печатает готовую команду `scp`, поддерживает `--emit-scp-cmd` для автоматизации и опции `--ssh-host`, `--ssh-port`, `--ssh-user` для корректного доступа к роутеру из внешней сети.
+  - Режим экспорта настраивается через `--export` (`scp`, `local`, `smb`), можно указать каталог назначения `--out-dir` и управлять уровнем логирования (`-q`, `-v`).
   - При `--export=smb` настраивает временную SMB-шару (при наличии `ksmbd`) без автоматической установки пакетов.
 - `openwrt_full_restore`
   - Валидирует архив (`tar -tzf`) и умеет работать в режиме dry-run без изменений на роутере.
@@ -38,7 +38,7 @@
 ## Установка
 
 ### Через пакет .ipk
-1. Соберите пакет самостоятельно (см. раздел «Сборка пакета (.ipk)») или скачайте готовый файл `openwrt-extended-backup_*.ipk`.
+1. Соберите пакет самостоятельно (см. раздел «Сборка пакета (.ipk)») или скачайте готовый артефакт `openwrt-extended-backup_*.ipk` из релиза GitHub.
 2. Передайте его на роутер, например:
    ```sh
    scp dist/openwrt-extended-backup_*.ipk root@<ip_роутера>:/tmp/
@@ -134,21 +134,20 @@ make install          # установит пакет через opkg, если 
 - Workflow [`Release`](.github/workflows/release.yml) использует [release-please](https://github.com/googleapis/release-please) для формирования GitHub Releases, обновления `CHANGELOG.md` и автоматической публикации архивов со скриптами.
 
 ## Примеры
-### SCP по умолчанию
+### SCP и удалённая выгрузка
 ```sh
-openwrt_full_backup
+openwrt_full_backup --ssh-host 192.168.1.1 --ssh-port 2222 --ssh-user root
 # Скрипт напечатает команду вида:
-# scp root@OpenWrt:/tmp/fullbackup_OpenWrt_24.10.4_2024-10-20_12-30-00.tar.gz <destination>
-# На локальной машине выполните команду, при необходимости добавив ключ и параметры проверки:
-scp -i ~/.ssh/openwrt_ed25519 \
-    -o StrictHostKeyChecking=accept-new \
-    root@OpenWrt:/tmp/fullbackup_OpenWrt_24.10.4_2024-10-20_12-30-00.tar.gz \
+# scp -P 2222 root@192.168.1.1:/tmp/fullbackup_OpenWrt_24.10.4_2024-10-20_12-30-00.tar.gz <destination>
+# На локальной машине выполните команду, заменив <destination> на каталог для сохранения архива:
+scp -P 2222 \
+    root@192.168.1.1:/tmp/fullbackup_OpenWrt_24.10.4_2024-10-20_12-30-00.tar.gz \
     ~/Backups/
 ```
-Для автоматизации можно использовать `--emit-scp-cmd`, чтобы вывести только команду без дополнительных сообщений:
+Используйте `--emit-scp-cmd`, чтобы получить только подготовленную команду (например, для копирования в буфер обмена или добавления в автоматизацию):
 ```sh
-openwrt_full_backup --emit-scp-cmd --ssh-host 192.168.1.1 --ssh-user root --ssh-port 2222 > /tmp/scp-command.txt
-sh /tmp/scp-command.txt
+openwrt_full_backup --emit-scp-cmd --ssh-host router.lan --ssh-port 2222 > /tmp/scp-command.txt
+# Откройте файл, замените <destination> на нужный путь и выполните команду на своей машине.
 ```
 
 ### SMB / ksmbd
@@ -199,6 +198,13 @@ opkg install luci-i18n-firewall-ru
 ```
 
 Можно, например, скрыть локализации (`user_installed_packages --exclude 'luci-i18n-*'`) или вернуть зависимости, помеченные `Auto-Installed: yes` (`user_installed_packages --include-auto-deps`).
+
+## Тестирование
+Фикстуры в `tests/fixtures/` и скрипт `tests/user_installed_packages_test.sh` проверяют сценарии генерации списка пакетов end-to-end. Тесты запускаются в CI и помогают избежать регрессий.
+
+```sh
+./tests/user_installed_packages_test.sh
+```
 
 ## Меры безопасности
 - Используйте SMB-шару только в доверенной сети. После копирования архива остановите `ksmbd` и удалите созданного пользователя: `ksmbd.deluser owrt_backup`.
