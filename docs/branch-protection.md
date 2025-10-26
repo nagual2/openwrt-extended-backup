@@ -1,78 +1,72 @@
 # Branch Protection Rules
 
-This document outlines the branch protection rules and CI requirements for the main branch.
+This document captures the current protection settings that are applied to the `main` branch.
 
 ## Required Status Checks
 
-The following GitHub Actions workflows must pass before PRs can be merged to main:
+Pull requests targeting `main` can merge once the following checks report success:
 
-- **CI / Lint and test**: Main CI workflow that runs linting, formatting, and tests
-- **Shell quality checks / Shell quality**: Dedicated shell script quality checks
-- **Post-release verification / Verify release artifacts**: Release artifact validation
+- **Shell quality / shell quality** – static analysis, formatting, and BATS tests
+- **Shell quality / Post-release verify** – placeholder job ensuring the workflow stays green
 
-## Branch Protection Settings
+> **Branch must be up to date:** `strict: true` is enabled, so PR branches must be rebased/merged with `main` before GitHub will mark the checks as satisfied.
 
-- **Required status checks**:  Configured
-  - CI / Lint and test (from ci.yml)
-  - Shell quality checks / Shell quality (from shell-quality.yml)
-  - Post-release verification / Verify release artifacts (from post-release-verify.yml)
-  - Branch must be up to date with main before merging
+## Pull Request Reviews
 
-- **Branch restrictions**:  Configured
-  - Force pushes: Disabled
-  - Deletions: Disabled
-  - Linear history: Not enforced
+- Approvals are **not required** (`required_approving_review_count = 0`).
+- Code owner reviews are **not required**.
+- Dismissal rules and stale review policies are **disabled**.
 
-- **Admin enforcement**:  Disabled
-  - Repository administrators are not exempt from protection rules
+With these settings, a PR with passing checks can merge (or auto-merge) without human intervention.
 
-## CI Workflows
+## Additional Protection Settings
 
-### 1. CI (ci.yml)
-- **Triggers**: push, pull_request to main
-- **Jobs**:
-  - Lint and test: ShellCheck, shfmt, BATS tests
-  - Shell compatibility matrix: Tests across different shells
-- **Runner**: ubuntu-latest
+- Force pushes: **Disabled**
+- Branch deletions: **Disabled**
+- Linear history: **Not enforced**
+- Admin enforcement: **Disabled**
+- Required conversation resolution: **Disabled**
 
-### 2. Shell quality checks (shell-quality.yml)
-- **Triggers**: push, pull_request to main
-- **Jobs**:
-  - Shell quality: ShellCheck, shfmt validation
-- **Runner**: ubuntu-latest
+## Applying the Configuration via API
 
-### 3. Post-release verification (post-release-verify.yml)
-- **Triggers**: release published
-- **Jobs**:
-  - Verify release artifacts: Checksum verification, smoke tests
-- **Runner**: ubuntu-latest
+1. Ensure `branch-protection-full.json` in the repository root reflects the desired settings (see latest contents in version control).
+2. Run the following command with repository admin credentials:
 
-## Required Status Check Names
+   ```bash
+   OWNER="<github-owner>"
+   REPO="<repository-name>"
+   TOKEN="<github-personal-access-token>"
 
-For branch protection to work correctly, ensure these exact names are used:
+   curl -sS -X PUT \
+     -H "Accept: application/vnd.github+json" \
+     -H "Authorization: Bearer ${TOKEN}" \
+     "https://api.github.com/repos/${OWNER}/${REPO}/branches/main/protection" \
+     -d @branch-protection-full.json
+   ```
 
-1. **CI / Lint and test** - from ci.yml job "lint-and-test"
-2. **Shell quality checks / Shell quality** - from shell-quality.yml job "shell-quality"
-3. **Post-release verification / Verify release artifacts** - from post-release-verify.yml job "verify-artifacts"
+   GitHub will respond with the updated protection object. If you prefer the GitHub CLI, the equivalent command is:
 
-## Troubleshooting
+   ```bash
+   gh api \
+     --method PUT \
+     -H "Accept: application/vnd.github+json" \
+     "/repos/${OWNER}/${REPO}/branches/main/protection" \
+     --input branch-protection-full.json
+   ```
 
-If PRs are failing to merge:
+## Optional: Enable Auto-merge
 
-1. Check if all required status checks are passing
-2. Verify the status check names match exactly
-3. Ensure workflows are not failing due to merge conflicts
-4. Check that the PR branch is up to date with main
+To allow PRs that meet the protection rules to merge automatically:
 
-## Branch Naming Convention
+1. Navigate to **Settings → General → Pull Requests**.
+2. Enable **Allow auto-merge**.
+3. Under **Merge button preferences**, enable **Allow squash merging** (recommended) and disable other merge methods if undesired.
+4. Authors can then enable auto-merge on their PR once checks are queued; GitHub will complete the merge when both required checks pass.
 
-- Feature branches: eat/feature-name
-- Bug fixes: ix/issue-description
-- Hotfixes: hotfix/issue-description
-- Releases: elease/vX.Y.Z
-- CI/Documentation: ci/*, docs/*, chore/*
+## Verification Checklist
 
-## Auto-deletion
+After applying the configuration:
 
-- Branches are automatically deleted after PR merge
-- No manual cleanup required for merged branches
+- Open a test pull request against `main`.
+- Confirm no review is requested; only the two required status checks should appear.
+- (Optional) Enable auto-merge on the PR and verify it completes automatically when the checks succeed.
