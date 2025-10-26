@@ -23,11 +23,13 @@ Use lowercase words separated by hyphens for the `<short-topic>` part (for examp
 Before opening a pull request:
 
 1. Ensure your branch is based on the latest `main` (`git fetch origin && git rebase origin/main`).
-2. Run the quality gate that mirrors the CI pipeline:
+2. Run the same checks that GitHub Actions executes:
    ```sh
-   ./scripts/ci/check-shell-quality.sh
+   find . -path './.git' -prune -o -type f \( -name '*.sh' -o -perm -111 \) -print0 | xargs -0 -r shellcheck -s sh --config-file=.shellcheckrc
+   find . -path './.git' -prune -o -type f \( -name '*.sh' -o -perm -111 \) -print0 | xargs -0 -r shfmt -d -i 2 -bn -ci -sr
+   BATS_SHELL=/bin/sh bats --print-output-on-failure tests
    ```
-   Resolve any reported issues or formatting patches created under the `reports/` directory.
+   Fix any reported issues before submitting your changes.
 3. Double-check that executable shell scripts keep their shebangs (`#!/bin/sh`) and remain POSIX-compliant.
 4. Update documentation, examples, and changelog entries when behaviour changes.
 
@@ -41,7 +43,7 @@ Before opening a pull request:
 
 ### Required status checks
 
-The repository enforces the **Shell quality checks / Shell quality** GitHub Action. Pull requests must be green on that check before merge. If new checks are added in the future, include them here so contributors know what is expected.
+The repository enforces the **CI / Lint and test** GitHub Action. Pull requests must be green on that check before merge. If new checks are added in the future, include them here so contributors know what is expected.
 
 ## Maintainer playbook
 

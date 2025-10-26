@@ -1,6 +1,6 @@
 # OpenWrt Extended Backup
 
-[![CI](https://github.com/nagual2/openwrt-extended-backup/actions/workflows/ci.yml/badge.svg)](https://github.com/nagual2/openwrt-extended-backup/actions/workflows/ci.yml)
+[![CI](https://github.com/nagual2/openwrt-extended-backup/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/nagual2/openwrt-extended-backup/actions/workflows/ci.yml)
 
 OpenWrt Extended Backup ships two lightweight POSIX shell scripts that run directly on your router:
 

@@ -1,0 +1,91 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  lint-and-test:
+    name: Lint and test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332 # v4.1.7
+
+      - name: Install dependencies
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends bats shellcheck curl ca-certificates
+
+      - name: Install shfmt
+        run: |
+          set -euo pipefail
+          shfmt_version="3.8.0"
+          shfmt_url="https://github.com/mvdan/sh/releases/download/v${shfmt_version}/shfmt_v${shfmt_version}_linux_amd64"
+          curl -fsSL "$shfmt_url" -o shfmt
+          echo "27b3c6f9d9592fc5b4856c341d1ff2c88856709b9e76469313642a1d7b558fe0  shfmt" | sha256sum -c -
+          sudo install -m 0755 shfmt /usr/local/bin/shfmt
+          rm -f shfmt
+
+      - name: Prepare shell file list
+        run: |
+          set -euo pipefail
+          mapfile -d '' -t files < <(git ls-files -z)
+          declare -a shell_targets=()
+          for path in "${files[@]}"; do
+            if [ ! -f "$path" ]; then
+              continue
+            fi
+            if [ -x "$path" ]; then
+              shell_targets+=("$path")
+              continue
+            fi
+            case "$path" in
+              *.sh) shell_targets+=("$path") ;;
+            esac
+          done
+          if [ "${#shell_targets[@]}" -eq 0 ]; then
+            : > shell-files.txt
+            echo "No shell files detected."
+          else
+            printf '%s\n' "${shell_targets[@]}" > shell-files.txt
+            printf 'Collected %d shell files.\n' "${#shell_targets[@]}"
+          fi
+
+      - name: Run ShellCheck
+        run: |
+          set -euo pipefail
+          if [ ! -s shell-files.txt ]; then
+            echo "No shell files detected. Skipping ShellCheck."
+            exit 0
+          fi
+          mapfile -t shell_targets < shell-files.txt
+          shellcheck -s sh --config-file=.shellcheckrc "${shell_targets[@]}"
+
+      - name: Check formatting
+        run: |
+          set -euo pipefail
+          if [ ! -s shell-files.txt ]; then
+            echo "No shell files detected. Skipping shfmt."
+            exit 0
+          fi
+          mapfile -t shell_targets < shell-files.txt
+          shfmt -d -i 2 -bn -ci -sr "${shell_targets[@]}"
+
+      - name: Run tests
+        run: |
+          set -euo pipefail
+          if [ ! -d tests ]; then
+            echo "No tests directory found. Skipping."
+            exit 0
+          fi
+          BATS_SHELL=/bin/sh bats --print-output-on-failure tests
