@@ -1,6 +1,10 @@
 # openwrt_full_backup & openwrt_full_restore
 
+<<<<<<< HEAD
 [![Shell quality checks](https://github.com/nagual2/openwrt-extended-backup/actions/workflows/shell-quality.yml/badge.svg?branch=main)](https://github.com/nagual2/openwrt-extended-backup/actions/workflows/shell-quality.yml)
+=======
+[![CI](https://github.com/nagual2/openwrt-extended-backup/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/nagual2/openwrt-extended-backup/actions/workflows/ci.yml)
+>>>>>>> origin/merge-tasks-1-15-into-main-e01
 
 Набор shell-утилит, выполняющихся напрямую на маршрутизаторе под управлением OpenWrt. Основной сценарий `openwrt_full_backup` создаёт полную резервную копию пользовательского слоя (`/overlay`), сохраняет архив в выбранный каталог (по умолчанию `/tmp`) и выводит готовую команду `scp` для копирования. При необходимости скрипт умеет поднять временную SMB-шару через `ksmbd`. Комплементарная утилита `openwrt_restore` валидирует архив, при наличии проверяет контрольную сумму, создаёт резервный снимок текущего `/overlay`, безопасно применяет резервную копию, поддерживает dry-run, переустановку пакетов и опциональный reboot. Наследуемый сценарий `openwrt_full_restore` остаётся для совместимости. Вспомогательный скрипт `user_installed_packages` выводит список вручную установленных пакетов для последующей переустановки.
 
@@ -125,10 +129,14 @@ make install          # установит пакет через opkg, если 
 | `openwrt_full_restore` | `-h`, `--help`, `-V`, `--version`, `-a`, `--archive`, `-d`, `--dry-run`, `-p`, `--packages`, `--no-packages`, `-y`, `--yes` | Легаси-скрипт с интерактивным отчётом, резервированием перезаписываемых файлов и подсказками по перезапуску служб. |
 | `user_installed_packages` | `-h`, `--help`, `-V`, `--version`, `--status-file`, `--user-installed-file`, `-x`, `--exclude`, `--include-auto-deps` | Анализирует текущую систему и выводит отсортированные команды `opkg`. |
 
+<<<<<<< HEAD
 ## Версионирование и релизы
 - Текущая версия хранится в файле `VERSION` в корне репозитория.
 - Оба скрипта поддерживают флаги `-V`/`--version` для быстрого вывода версии без запуска основной логики.
 - Workflow [`Release`](.github/workflows/release.yml) использует [release-please](https://github.com/googleapis/release-please) для формирования GitHub Releases, обновления `CHANGELOG.md` и автоматической публикации архивов со скриптами.
+=======
+Run the backup script as root on the router. By default, it stores the archive in `/tmp`, prints the full path, and shows an `scp` command that you can run from your workstation.
+>>>>>>> origin/merge-tasks-1-15-into-main-e01
 
 ## Примеры
 ### SCP по умолчанию
@@ -186,10 +194,13 @@ luci-app-sqm
 luci-theme-material
 smartmontools
 tailscale
+<<<<<<< HEAD
 
+=======
+htop
+>>>>>>> origin/merge-tasks-1-15-into-main-e01
 # LuCI translations (1)
 luci-i18n-firewall-ru
-
 opkg update
 opkg install bash htop luci-app-sqm luci-theme-material smartmontools tailscale
 opkg install luci-i18n-firewall-ru
@@ -225,4 +236,21 @@ opkg install luci-i18n-firewall-ru
 
 ---
 
+<<<<<<< HEAD
 Скрипты распространяются «как есть». Будем рады обратной связи и улучшениям через Pull Request.
+=======
+The CI workflow defined in `ci.yml` runs the same formatting and test checks.
+
+## Releases
+
+- The current version is stored in the root `VERSION` file.
+- Both scripts expose `-V`/`--version` to print the version without executing the main logic.
+- The workflow [`.github/workflows/release.yml`](.github/workflows/release.yml) runs on tags matching `v*`, builds `openwrt-extended-backup-${VERSION}.tar.gz` and `.zip`, generates `SHA256SUMS`, and publishes a GitHub Release using the matching section from `CHANGELOG.md`.
+- To publish a new release manually (example for `v0.1.0`):
+  1. Update `VERSION`: `printf '0.1.0\n' > VERSION`.
+  2. Add or update the `## [v0.1.0]` section in `CHANGELOG.md` with the release notes.
+  3. Commit the changes: `git commit -am "chore: prepare release 0.1.0"`.
+  4. Create an annotated tag: `git tag -a v0.1.0 -m "v0.1.0"`.
+  5. Push the branch and tag: `git push origin main && git push origin v0.1.0`.
+  6. Wait for GitHub Actions to publish the release with packaged archives and `SHA256SUMS`.
+>>>>>>> origin/merge-tasks-1-15-into-main-e01

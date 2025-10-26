@@ -1,11 +1,19 @@
 # Changelog
 
+<<<<<<< HEAD
+=======
+All notable changes to this project will be documented in this file.
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+>>>>>>> origin/merge-tasks-1-15-into-main-e01
 ## [Unreleased]
 
 ### Features
 
 * **restore:** add `openwrt_restore` script with safety snapshot, package reinstall flow, and docs/tests updates
 
+<<<<<<< HEAD
 ## [0.8.3](https://github.com/nagual2/openwrt-extended-backup/compare/v0.8.2...v0.8.3) (2025-10-24)
 
 
@@ -61,3 +69,9 @@
 All notable changes to this project will be documented in this file.
 
 Before tagging a new release (`v*`), update the `VERSION` file and add a matching section above so the automated workflow can publish the release notes.
+=======
+- Introduced `openwrt_full_backup` to create reproducible archives of the writable overlay with `scp`, `local`, and `smb` export modes plus an `--emit-scp-cmd` helper for automation.
+- Added optional SMB export orchestration through `ksmbd`, including automatic share provisioning, credential management, and recycling of existing shares when present.
+- Introduced `user_installed_packages` to generate deterministic reinstall scripts for manually installed `opkg` packages with grouping, filtering, and support for supplemental package lists.
+- Added automated formatting (`shfmt`), Bats-based tests, and documentation to support ongoing work on the scripts.
+>>>>>>> origin/merge-tasks-1-15-into-main-e01

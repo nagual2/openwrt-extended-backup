@@ -7,36 +7,36 @@ PROGRAM=$(basename "$0")
 SCRIPT_PATH=$0
 
 case "$SCRIPT_PATH" in
-    */*)
-        SCRIPT_SOURCE=$(dirname "$SCRIPT_PATH")
-        ;;
-    *)
-        LOOKUP=$(command -v -- "$SCRIPT_PATH" 2>/dev/null || printf '')
-        if [ -n "$LOOKUP" ]; then
-            SCRIPT_SOURCE=$(dirname "$LOOKUP")
-        else
-            SCRIPT_SOURCE='.'
-        fi
-        ;;
+  */*)
+    SCRIPT_SOURCE=$(dirname "$SCRIPT_PATH")
+    ;;
+  *)
+    LOOKUP=$(command -v -- "$SCRIPT_PATH" 2> /dev/null || printf '')
+    if [ -n "$LOOKUP" ]; then
+      SCRIPT_SOURCE=$(dirname "$LOOKUP")
+    else
+      SCRIPT_SOURCE='.'
+    fi
+    ;;
 esac
 
-if ! SCRIPT_DIR=$(cd "$SCRIPT_SOURCE" 2>/dev/null && pwd); then
-    printf '%s: unable to determine script directory\n' "$PROGRAM" >&2
-    exit 1
+if ! SCRIPT_DIR=$(cd "$SCRIPT_SOURCE" 2> /dev/null && pwd); then
+  printf '%s: unable to determine script directory\n' "$PROGRAM" >&2
+  exit 1
 fi
 PROJECT_ROOT=$(dirname "$SCRIPT_DIR")
 VERSION_FILE="${PROJECT_ROOT}/VERSION"
 SHARE_VERSION_FILE='/usr/share/openwrt-extended-backup/VERSION'
-VERSION_FALLBACK='0.4.1'
+VERSION_FALLBACK='0.1.0'
 
 if [ -r "$VERSION_FILE" ]; then
-    VERSION=$(head -n 1 "$VERSION_FILE")
+  VERSION=$(head -n 1 "$VERSION_FILE")
 elif [ -r "$SHARE_VERSION_FILE" ]; then
-    VERSION=$(head -n 1 "$SHARE_VERSION_FILE")
+  VERSION=$(head -n 1 "$SHARE_VERSION_FILE")
 fi
 
 if [ -z "${VERSION-}" ]; then
-    VERSION=$VERSION_FALLBACK
+  VERSION=$VERSION_FALLBACK
 fi
 
 OPENWRT_RELEASE_PATH=${OPENWRT_RELEASE_PATH:-/etc/openwrt_release}
@@ -44,7 +44,7 @@ KSMBD_INIT_SCRIPT=${KSMBD_INIT_SCRIPT:-/etc/init.d/ksmbd}
 SMB_CLEANUP_DIR=${SMB_CLEANUP_DIR:-}
 
 show_version() {
-    printf '%s version %s\n' "$PROGRAM" "$VERSION"
+  printf '%s version %s\n' "$PROGRAM" "$VERSION"
 }
 
 EX_OK=0
@@ -63,6 +63,7 @@ ARCHIVE_FILENAME=''
 ARCHIVE_PATH=''
 REMOVE_ARCHIVE_ON_FAILURE=0
 
+<<<<<<< HEAD
 DRY_RUN_VALUE=${DRY_RUN-}
 DRY_RUN=0
 if [ -n "$DRY_RUN_VALUE" ]; then
@@ -79,6 +80,16 @@ if [ -n "$DRY_RUN_VALUE" ]; then
     esac
 fi
 unset DRY_RUN_VALUE
+=======
+DEFAULT_OPENWRT_RELEASE_FILE='/etc/openwrt_release'
+OPENWRT_RELEASE_FILE=${OPENWRT_RELEASE_FILE:-$DEFAULT_OPENWRT_RELEASE_FILE}
+DEFAULT_OVERLAY_DIR='/overlay'
+OVERLAY_DIR=${OVERLAY_DIR:-$DEFAULT_OVERLAY_DIR}
+DEFAULT_KSMBD_INIT_SCRIPT='/etc/init.d/ksmbd'
+KSMBD_INIT_SCRIPT=${KSMBD_INIT_SCRIPT:-$DEFAULT_KSMBD_INIT_SCRIPT}
+SMB_CLEANUP_SHARE_HOOK=''
+SMB_CLEANUP_USER_HOOK=''
+>>>>>>> origin/merge-tasks-1-15-into-main-e01
 
 KSMBD_SHARE_NAME='owrt_archive'
 KSMBD_USER='owrt_backup'
@@ -90,44 +101,44 @@ KSMBD_SHARE_EXISTED=0
 CLEANUP_DONE=0
 
 timestamp() {
-    date '+%Y-%m-%d %H:%M:%S'
+  date '+%Y-%m-%d %H:%M:%S'
 }
 
 log_print() {
-    threshold=$1
-    level=$2
-    shift 2
+  threshold=$1
+  level=$2
+  shift 2
 
-    if [ "$level" = 'ERROR' ] || [ "$LOG_LEVEL" -ge "$threshold" ]; then
-        if [ "$#" -gt 0 ]; then
-            printf '%s %s %s\n' "$(timestamp)" "$level" "$*" >&2
-        else
-            printf '%s %s\n' "$(timestamp)" "$level" >&2
-        fi
+  if [ "$level" = 'ERROR' ] || [ "$LOG_LEVEL" -ge "$threshold" ]; then
+    if [ "$#" -gt 0 ]; then
+      printf '%s %s %s\n' "$(timestamp)" "$level" "$*" >&2
+    else
+      printf '%s %s\n' "$(timestamp)" "$level" >&2
     fi
+  fi
 }
 
 log_info() {
-    log_print 1 'INFO' "$@"
+  log_print 1 'INFO' "$@"
 }
 
 log_debug() {
-    log_print 2 'DEBUG' "$@"
+  log_print 2 'DEBUG' "$@"
 }
 
 log_error() {
-    log_print 0 'ERROR' "$@"
+  log_print 0 'ERROR' "$@"
 }
 
 fatal() {
-    message=$1
-    code=${2:-$EX_SOFTWARE}
-    log_error "$message"
-    exit "$code"
+  message=$1
+  code=${2:-$EX_SOFTWARE}
+  log_error "$message"
+  exit "$code"
 }
 
 usage() {
-    cat <<'EOF'
+  cat << 'EOF'
 Использование: openwrt_full_backup [ОПЦИИ]
 
 Опции:
@@ -147,20 +158,20 @@ EOF
 }
 
 require_command() {
-    if ! command -v "$1" >/dev/null 2>&1; then
-        fatal "Требуемая утилита '$1' недоступна" "$EX_UNAVAILABLE"
-    fi
+  if ! command -v "$1" > /dev/null 2>&1; then
+    fatal "Требуемая утилита '$1' недоступна" "$EX_UNAVAILABLE"
+  fi
 }
 
 to_absolute_path() {
-    case "$1" in
-        /*)
-            printf '%s\n' "$1"
-            ;;
-        *)
-            printf '%s/%s\n' "$(pwd)" "$1"
-            ;;
-    esac
+  case "$1" in
+    /*)
+      printf '%s\n' "$1"
+      ;;
+    *)
+      printf '%s/%s\n' "$(pwd)" "$1"
+      ;;
+  esac
 }
 
 smb_cleanup_dir() {
@@ -172,10 +183,445 @@ smb_cleanup_dir() {
 }
 
 find_share_index_by_name() {
+  name=$1
+  # shellcheck disable=SC2312 # uci is provided by OpenWrt
+  share_indexes=$(uci -q show ksmbd | sed -n 's/^ksmbd\.@share\[\([0-9]\+\)\]=share$/\1/p')
+  for idx in $share_indexes; do
+    # shellcheck disable=SC2312
+    current=$(uci -q get "ksmbd.@share[$idx].name" 2> /dev/null || printf '')
+    if [ "$current" = "$name" ]; then
+      printf '%s\n' "$idx"
+      return 0
+    fi
+  done
+  return 1
+}
+
+# shellcheck disable=SC2317
+remove_smb_share() {
+  idx=$(find_share_index_by_name "$KSMBD_SHARE_NAME" 2> /dev/null || printf '')
+  if [ -n "$idx" ]; then
+    # shellcheck disable=SC2312 # uci is provided by OpenWrt at runtime
+    uci delete "ksmbd.@share[$idx]" > /dev/null 2>&1 || true
+    # shellcheck disable=SC2312
+    uci commit ksmbd > /dev/null 2>&1 || true
+    if [ -x "$KSMBD_INIT_SCRIPT" ]; then
+      "$KSMBD_INIT_SCRIPT" restart > /dev/null 2>&1 || true
+    fi
+  fi
+}
+
+# shellcheck disable=SC2317
+cleanup() {
+  status=$1
+
+  if [ "$CLEANUP_DONE" -eq 1 ]; then
+    exit "$status"
+  fi
+  CLEANUP_DONE=1
+
+  set +e
+
+  if [ "$status" -ne 0 ] && [ "$REMOVE_ARCHIVE_ON_FAILURE" -eq 1 ] && [ -n "$ARCHIVE_PATH" ]; then
+    rm -f "$ARCHIVE_PATH"
+  fi
+
+  if [ "$status" -ne 0 ] && [ "$EXPORT_MODE" = 'smb' ] && [ "$KSMBD_SHARE_CREATED" -eq 1 ] && [ "$KSMBD_SHARE_EXISTED" -eq 0 ]; then
+    remove_smb_share
+  fi
+
+  exit "$status"
+}
+
+trap 'cleanup $?' EXIT
+trap 'cleanup 130' INT
+trap 'cleanup 143' TERM
+
+parse_args() {
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --export=*)
+        EXPORT_MODE=${1#--export=}
+        ;;
+      --export)
+        shift || fatal 'Опция --export требует аргумент' "$EX_USAGE"
+        EXPORT_MODE=$1
+        ;;
+      --emit-scp-cmd)
+        EMIT_SCP_CMD=1
+        ;;
+      --ssh-host=*)
+        SSH_HOST=${1#--ssh-host=}
+        ;;
+      --ssh-host)
+        shift || fatal 'Опция --ssh-host требует аргумент' "$EX_USAGE"
+        SSH_HOST=$1
+        ;;
+      --ssh-port=*)
+        SSH_PORT=${1#--ssh-port=}
+        ;;
+      --ssh-port)
+        shift || fatal 'Опция --ssh-port требует аргумент' "$EX_USAGE"
+        SSH_PORT=$1
+        ;;
+      --ssh-user=*)
+        SSH_USER=${1#--ssh-user=}
+        ;;
+      --ssh-user)
+        shift || fatal 'Опция --ssh-user требует аргумент' "$EX_USAGE"
+        SSH_USER=$1
+        ;;
+      --out-dir=*)
+        OUT_DIR=${1#--out-dir=}
+        ;;
+      --out-dir)
+        shift || fatal 'Опция --out-dir требует аргумент' "$EX_USAGE"
+        OUT_DIR=$1
+        ;;
+      -v)
+        if [ "$LOG_LEVEL" -lt 2 ]; then
+          LOG_LEVEL=$((LOG_LEVEL + 1))
+        fi
+        ;;
+      -q | --quiet)
+        LOG_LEVEL=0
+        ;;
+      -h | --help)
+        usage
+        exit "$EX_OK"
+        ;;
+      -V | --version)
+        show_version
+        exit "$EX_OK"
+        ;;
+      --)
+        shift
+        break
+        ;;
+      -*)
+        fatal "Неизвестная опция: $1" "$EX_USAGE"
+        ;;
+      *)
+        fatal "Неожиданный аргумент: $1" "$EX_USAGE"
+        ;;
+    esac
+    shift
+  done
+
+  if [ $# -gt 0 ]; then
+    fatal "Неожиданный аргумент: $1" "$EX_USAGE"
+  fi
+
+  case "$EXPORT_MODE" in
+    scp | smb | local) ;;
+    *)
+      fatal "Неподдерживаемый режим экспорта: $EXPORT_MODE" "$EX_USAGE"
+      ;;
+  esac
+
+  case "$SSH_PORT" in
+    '' | *[!0-9]*)
+      fatal 'Порт SSH должен быть целым числом' "$EX_USAGE"
+      ;;
+  esac
+}
+
+sanitize_token() {
+  token=$1
+  printf '%s\n' "$token" | tr ' ' '_' | tr -c 'A-Za-z0-9_.-' '_'
+}
+
+get_firmware_tag() {
+  release_file=$OPENWRT_RELEASE_FILE
+
+  if [ -n "$release_file" ] && [ -r "$release_file" ]; then
+    desc=$(grep "^DISTRIB_DESCRIPTION='" "$release_file" 2> /dev/null | head -n 1)
+    if [ -n "$desc" ]; then
+      value=$(printf '%s' "$desc" | cut -d"'" -f2)
+      if [ -n "$value" ]; then
+        sanitize_token "$value"
+        return 0
+      fi
+    fi
+  fi
+
+  if command -v uname > /dev/null 2>&1; then
+    sanitize_token "$(uname -n)"
+    return 0
+  fi
+
+  printf 'OpenWrt\n'
+}
+
+ensure_openwrt_environment() {
+  if [ -z "$OPENWRT_RELEASE_FILE" ]; then
+    OPENWRT_RELEASE_FILE=$DEFAULT_OPENWRT_RELEASE_FILE
+  fi
+
+  case "$OPENWRT_RELEASE_FILE" in
+    /*) ;;
+    *)
+      OPENWRT_RELEASE_FILE=$(to_absolute_path "$OPENWRT_RELEASE_FILE")
+      ;;
+  esac
+
+  if [ ! -f "$OPENWRT_RELEASE_FILE" ] || [ ! -r "$OPENWRT_RELEASE_FILE" ]; then
+    fatal "Среда не похожа на OpenWrt: отсутствует файл $OPENWRT_RELEASE_FILE (используйте переменную OPENWRT_RELEASE_FILE для переопределения)" "$EX_UNAVAILABLE"
+  fi
+
+  if [ -z "$OVERLAY_DIR" ]; then
+    OVERLAY_DIR=$DEFAULT_OVERLAY_DIR
+  fi
+
+  case "$OVERLAY_DIR" in
+    /*) ;;
+    *)
+      OVERLAY_DIR=$(to_absolute_path "$OVERLAY_DIR")
+      ;;
+  esac
+
+  if [ ! -d "$OVERLAY_DIR" ]; then
+    fatal "Каталог overlay не найден: $OVERLAY_DIR (используйте переменную OVERLAY_DIR для переопределения)" "$EX_UNAVAILABLE"
+  fi
+
+  if [ ! -r "$OVERLAY_DIR" ] || [ ! -x "$OVERLAY_DIR" ]; then
+    fatal "Каталог overlay недоступен: $OVERLAY_DIR" "$EX_UNAVAILABLE"
+  fi
+}
+
+prepare_environment() {
+  require_command tar
+  require_command date
+
+  ensure_openwrt_environment
+
+  case "$OUT_DIR" in
+    /*) ;;
+    *)
+      OUT_DIR=$(to_absolute_path "$OUT_DIR")
+      ;;
+  esac
+
+  if [ "$EXPORT_MODE" = 'scp' ]; then
+    log_debug 'Режим экспорта: SCP'
+  elif [ "$EXPORT_MODE" = 'smb' ]; then
+    log_debug 'Режим экспорта: SMB'
+  else
+    log_debug 'Режим экспорта: local'
+  fi
+
+  if ! mkdir -p "$OUT_DIR"; then
+    fatal "Не удалось создать каталог: $OUT_DIR" "$EX_SOFTWARE"
+  fi
+
+  if [ ! -w "$OUT_DIR" ]; then
+    fatal "Каталог недоступен для записи: $OUT_DIR" "$EX_SOFTWARE"
+  fi
+}
+
+create_archive() {
+  firmware=$(get_firmware_tag)
+  timestamp_label=$(date +'%Y-%m-%d_%H-%M-%S')
+  ARCHIVE_FILENAME="fullbackup_${firmware}_${timestamp_label}.tar.gz"
+  ARCHIVE_PATH="${OUT_DIR%/}/$ARCHIVE_FILENAME"
+
+  if [ -e "$ARCHIVE_PATH" ]; then
+    fatal "Файл уже существует: $ARCHIVE_PATH" "$EX_SOFTWARE"
+  fi
+
+  overlay_root=$OVERLAY_DIR
+  case "$overlay_root" in
+    */)
+      overlay_root=${overlay_root%/}
+      ;;
+  esac
+  if [ -z "$overlay_root" ]; then
+    overlay_root='/'
+  fi
+
+  overlay_work="$overlay_root/work"
+  overlay_run="$overlay_root/upper/run"
+  overlay_etc_os_release="$overlay_root/upper/etc/os-release"
+  overlay_usr_os_release="$overlay_root/upper/usr/lib/os-release"
+
+  log_info "Создание архива: $ARCHIVE_PATH"
+  REMOVE_ARCHIVE_ON_FAILURE=1
+
+  if ! tar -czpf "$ARCHIVE_PATH" \
+    --preserve-permissions \
+    --same-owner \
+    --exclude="$overlay_work" \
+    --exclude="$overlay_run" \
+    --exclude="$overlay_etc_os_release" \
+    --exclude="$overlay_usr_os_release" \
+    "$OVERLAY_DIR"; then
+    fatal 'Не удалось создать архив' "$EX_SOFTWARE"
+  fi
+
+  REMOVE_ARCHIVE_ON_FAILURE=0
+
+  log_info "Архив сохранён: $ARCHIVE_PATH"
+
+  if command -v du > /dev/null 2>&1; then
+    size=$(du -h "$ARCHIVE_PATH" 2> /dev/null | awk '{print $1}' | head -n 1)
+    if [ -n "$size" ]; then
+      log_info "Размер архива: $size"
+    fi
+  fi
+}
+
+ensure_ksmbd_dependencies() {
+  missing=''
+
+  for dependency in ksmbd.adduser uci; do
+    if ! command -v "$dependency" > /dev/null 2>&1; then
+      if [ -n "$missing" ]; then
+        missing="$missing, $dependency"
+      else
+        missing=$dependency
+      fi
+    fi
+  done
+
+  if [ -n "$missing" ]; then
+    fatal "SMB экспорт недоступен: отсутствуют утилиты $missing" "$EX_UNAVAILABLE"
+  fi
+
+  if [ -z "$KSMBD_INIT_SCRIPT" ]; then
+    KSMBD_INIT_SCRIPT=$DEFAULT_KSMBD_INIT_SCRIPT
+  fi
+
+  case "$KSMBD_INIT_SCRIPT" in
+    /*) ;;
+    *)
+      KSMBD_INIT_SCRIPT=$(to_absolute_path "$KSMBD_INIT_SCRIPT")
+      ;;
+  esac
+
+  if [ ! -x "$KSMBD_INIT_SCRIPT" ]; then
+    fatal "SMB экспорт недоступен: не найден init-скрипт ksmbd ($KSMBD_INIT_SCRIPT)" "$EX_UNAVAILABLE"
+  fi
+
+  if command -v ksmbd.status > /dev/null 2>&1; then
+    log_debug 'Обнаружен ksmbd.status'
+  fi
+}
+
+generate_password() {
+  if command -v tr > /dev/null 2>&1; then
+    candidate=$(tr -dc 'A-Za-z0-9' < /dev/urandom 2> /dev/null | head -c 16)
+    if [ -n "$candidate" ]; then
+      printf '%s\n' "$candidate"
+      return 0
+    fi
+  fi
+  printf 'owrt_%s\n' "$(date +'%H%M%S')"
+}
+
+setup_smb_export() {
+  ensure_ksmbd_dependencies
+
+  if [ -z "$KSMBD_PASSWORD" ]; then
+    KSMBD_PASSWORD=$(generate_password)
+  fi
+
+  log_info "Обновление пользователя SMB: $KSMBD_USER"
+  # shellcheck disable=SC2312 # ksmbd.adduser доступен только на OpenWrt
+  ksmbd.adduser "$KSMBD_USER" -p "$KSMBD_PASSWORD"
+
+  share_index=$(find_share_index_by_name "$KSMBD_SHARE_NAME" 2> /dev/null || printf '')
+  if [ -n "$share_index" ]; then
+    KSMBD_SHARE_EXISTED=1
+    target_index=$share_index
+    log_debug "Используется существующая шара @$share_index"
+  else
+    log_info "Создание SMB-шары: $KSMBD_SHARE_NAME"
+    # shellcheck disable=SC2312
+    if ! uci add ksmbd share > /dev/null 2>&1; then
+      fatal 'Не удалось создать раздел ksmbd share' "$EX_SOFTWARE"
+    fi
+    target_index='-1'
+    KSMBD_SHARE_EXISTED=0
+  fi
+
+  # shellcheck disable=SC2312
+  uci set "ksmbd.@share[$target_index].name=$KSMBD_SHARE_NAME"
+  # shellcheck disable=SC2312
+  uci set "ksmbd.@share[$target_index].path=$OUT_DIR"
+  # shellcheck disable=SC2312
+  uci set "ksmbd.@share[$target_index].guest_ok='no'"
+  # shellcheck disable=SC2312
+  uci set "ksmbd.@share[$target_index].read_only='yes'"
+  # shellcheck disable=SC2312
+  uci set "ksmbd.@share[$target_index].create_mask='0644'"
+  # shellcheck disable=SC2312
+  uci set "ksmbd.@share[$target_index].dir_mask='0755'"
+  # shellcheck disable=SC2312
+  uci set "ksmbd.@share[$target_index].users=$KSMBD_USER"
+  # shellcheck disable=SC2312
+  uci commit ksmbd
+
+  KSMBD_SHARE_CREATED=1
+
+  if ! "$KSMBD_INIT_SCRIPT" restart > /dev/null 2>&1; then
+    fatal 'Не удалось перезапустить службу ksmbd' "$EX_SOFTWARE"
+  fi
+
+  # shellcheck disable=SC2119
+  create_smb_cleanup_hooks
+
+  host=$(get_hostname)
+  ip=$(get_primary_ip)
+
+  if [ -n "$ip" ]; then
+    log_info "SMB-шара доступна по адресу \\\\$ip\\\\$KSMBD_SHARE_NAME"
+  fi
+  log_info "SMB-шара доступна по имени \\\\$host\\\\$KSMBD_SHARE_NAME"
+  log_info "Имя пользователя: $KSMBD_USER"
+  log_info "Пароль: $KSMBD_PASSWORD"
+  if [ -n "$SMB_CLEANUP_SHARE_HOOK" ]; then
+    log_info "Очистка шары: sh $SMB_CLEANUP_SHARE_HOOK"
+  fi
+  if [ -n "$SMB_CLEANUP_USER_HOOK" ]; then
+    log_info "Удаление пользователя: sh $SMB_CLEANUP_USER_HOOK"
+  fi
+}
+
+# shellcheck disable=SC2120
+create_smb_cleanup_hooks() {
+  cleanup_root="${OUT_DIR%/}/.openwrt-extended-backup"
+  share_hook="$cleanup_root/cleanup-remove-share.sh"
+  user_hook="$cleanup_root/cleanup-remove-user.sh"
+
+  if ! mkdir -p "$cleanup_root"; then
+    log_error "Не удалось создать каталог cleanup-хуков: $cleanup_root"
+    SMB_CLEANUP_SHARE_HOOK=''
+    SMB_CLEANUP_USER_HOOK=''
+    return
+  fi
+
+  SMB_CLEANUP_SHARE_HOOK=$share_hook
+  SMB_CLEANUP_USER_HOOK=$user_hook
+
+  if ! cat << EOF > "$share_hook"; then
+#!/bin/sh
+# shellcheck shell=sh
+
+set -eu
+
+SHARE_NAME='${KSMBD_SHARE_NAME}'
+INIT_SCRIPT='${KSMBD_INIT_SCRIPT}'
+
+if ! command -v uci >/dev/null 2>&1; then
+    printf 'uci недоступен. Удалите SMB-шару вручную: %s\n' "$SHARE_NAME" >&2
+    exit 0
+fi
+
+find_share_index_by_name() {
     name=$1
     share_indexes=$(uci -q show ksmbd | sed -n 's/^ksmbd\.@share\[\([0-9]\+\)\]=share$/\1/p')
     for idx in $share_indexes; do
-        current=$(uci -q get "ksmbd.@share[$idx].name" 2>/dev/null || printf '')
+        current=$(uci -q get "ksmbd.@share[$idx].name" 2> /dev/null || printf '')
         if [ "$current" = "$name" ]; then
             printf '%s\n' "$idx"
             return 0
@@ -184,31 +630,39 @@ find_share_index_by_name() {
     return 1
 }
 
-remove_smb_share() {
-    idx=$(find_share_index_by_name "$KSMBD_SHARE_NAME" 2>/dev/null || printf '')
+if idx=$(find_share_index_by_name "$SHARE_NAME" 2> /dev/null); then
     if [ -n "$idx" ]; then
         uci delete "ksmbd.@share[$idx]" >/dev/null 2>&1 || true
         uci commit ksmbd >/dev/null 2>&1 || true
+<<<<<<< HEAD
         if [ -x "$KSMBD_INIT_SCRIPT" ]; then
             "$KSMBD_INIT_SCRIPT" restart >/dev/null 2>&1 || true
         fi
+=======
+>>>>>>> origin/harden-backup-scripts-openwrt-guard-shellcheck-shfmt-bump-0.1.0
     fi
-}
+fi
 
-cleanup() {
-    status=$1
+if [ -x "$INIT_SCRIPT" ]; then
+    "$INIT_SCRIPT" restart >/dev/null 2>&1 || true
+fi
+EOF
+    log_error "Не удалось создать скрипт очистки SMB-шары: $share_hook"
+    SMB_CLEANUP_SHARE_HOOK=''
+  else
+    chmod 700 "$share_hook" 2> /dev/null || chmod 600 "$share_hook" 2> /dev/null || true
+  fi
 
-    if [ "$CLEANUP_DONE" -eq 1 ]; then
-        exit "$status"
-    fi
-    CLEANUP_DONE=1
+  # shellcheck disable=SC2153
+  if ! cat << EOF > "$user_hook"; then
+#!/bin/sh
+# shellcheck shell=sh
 
-    set +e
+set -eu
 
-    if [ "$status" -ne 0 ] && [ "$REMOVE_ARCHIVE_ON_FAILURE" -eq 1 ] && [ -n "$ARCHIVE_PATH" ]; then
-        rm -f "$ARCHIVE_PATH"
-    fi
+SMB_USER='${KSMBD_USER}'
 
+<<<<<<< HEAD
     if [ "$status" -ne 0 ] && [ "$EXPORT_MODE" = 'smb' ] && [ "$KSMBD_SHARE_CREATED" -eq 1 ] && [ "$KSMBD_SHARE_EXISTED" -eq 0 ]; then
         remove_smb_share
     fi
@@ -583,61 +1037,75 @@ setup_smb_export() {
     log_info "SMB-шара доступна по имени \\\\$host\\\\$KSMBD_SHARE_NAME"
     log_info "Имя пользователя: $KSMBD_USER"
     log_info "Пароль: $KSMBD_PASSWORD"
+=======
+if command -v ksmbd.deluser >/dev/null 2>&1; then
+    # shellcheck disable=SC2153
+    ksmbd.deluser "$SMB_USER"
+else
+    printf 'Удалите пользователя ksmbd вручную: %s\n' "$SMB_USER" >&2
+fi
+EOF
+    log_error "Не удалось создать скрипт очистки SMB-пользователя: $user_hook"
+    SMB_CLEANUP_USER_HOOK=''
+  else
+    chmod 700 "$user_hook" 2> /dev/null || chmod 600 "$user_hook" 2> /dev/null || true
+  fi
+>>>>>>> origin/harden-backup-scripts-openwrt-guard-shellcheck-shfmt-bump-0.1.0
 }
 
 get_hostname() {
-    if command -v uci >/dev/null 2>&1; then
-        host=$(uci -q get system.@system[0].hostname 2>/dev/null || printf '')
-        if [ -n "$host" ]; then
-            printf '%s\n' "$host"
-            return 0
-        fi
+  if command -v uci > /dev/null 2>&1; then
+    host=$(uci -q get system.@system[0].hostname 2> /dev/null || printf '')
+    if [ -n "$host" ]; then
+      printf '%s\n' "$host"
+      return 0
     fi
-    if command -v hostname >/dev/null 2>&1; then
-        hostname 2>/dev/null
-        return 0
-    fi
-    printf '%s\n' "$SSH_HOST"
+  fi
+  if command -v hostname > /dev/null 2>&1; then
+    hostname 2> /dev/null
+    return 0
+  fi
+  printf '%s\n' "$SSH_HOST"
 }
 
 get_primary_ip() {
-    if ! command -v ip >/dev/null 2>&1; then
-        return 1
-    fi
-
-    if ip -4 addr show br-lan >/dev/null 2>&1; then
-        candidate=$(ip -4 addr show br-lan | awk '/inet / {print $2}' | cut -d/ -f1 | head -n 1)
-        if [ -n "$candidate" ]; then
-            printf '%s\n' "$candidate"
-            return 0
-        fi
-    fi
-
-    candidate=$(ip -4 addr show | awk '/inet / && $2 !~ /^127\./ {print $2}' | cut -d/ -f1 | head -n 1)
-    if [ -n "$candidate" ]; then
-        printf '%s\n' "$candidate"
-        return 0
-    fi
+  if ! command -v ip > /dev/null 2>&1; then
     return 1
+  fi
+
+  if ip -4 addr show br-lan > /dev/null 2>&1; then
+    candidate=$(ip -4 addr show br-lan | awk '/inet / {print $2}' | cut -d/ -f1 | head -n 1)
+    if [ -n "$candidate" ]; then
+      printf '%s\n' "$candidate"
+      return 0
+    fi
+  fi
+
+  candidate=$(ip -4 addr show | awk '/inet / && $2 !~ /^127\./ {print $2}' | cut -d/ -f1 | head -n 1)
+  if [ -n "$candidate" ]; then
+    printf '%s\n' "$candidate"
+    return 0
+  fi
+  return 1
 }
 
 emit_scp_instruction() {
-    scp_opts=''
-    if [ "$SSH_PORT" != '22' ]; then
-        scp_opts="-P $SSH_PORT"
-    fi
+  scp_opts=''
+  if [ "$SSH_PORT" != '22' ]; then
+    scp_opts="-P $SSH_PORT"
+  fi
 
-    command_text="scp"
-    if [ -n "$scp_opts" ]; then
-        command_text="$command_text $scp_opts"
-    fi
-    command_text="$command_text $SSH_USER@$SSH_HOST:$ARCHIVE_PATH <destination>"
+  command_text="scp"
+  if [ -n "$scp_opts" ]; then
+    command_text="$command_text $scp_opts"
+  fi
+  command_text="$command_text $SSH_USER@$SSH_HOST:$ARCHIVE_PATH <destination>"
 
-    log_info "Готовая команда SCP: $command_text"
+  log_info "Готовая команда SCP: $command_text"
 
-    if [ "$EMIT_SCP_CMD" -eq 1 ]; then
-        printf '%s\n' "$command_text"
-    fi
+  if [ "$EMIT_SCP_CMD" -eq 1 ]; then
+    printf '%s\n' "$command_text"
+  fi
 }
 
 parse_args "$@"
@@ -650,15 +1118,15 @@ prepare_environment
 create_archive
 
 case "$EXPORT_MODE" in
-    scp)
-        emit_scp_instruction
-        ;;
-    smb)
-        setup_smb_export
-        ;;
-    local)
-        log_info "Архив сохранён в $ARCHIVE_PATH"
-        ;;
+  scp)
+    emit_scp_instruction
+    ;;
+  smb)
+    setup_smb_export
+    ;;
+  local)
+    log_info "Архив сохранён в $ARCHIVE_PATH"
+    ;;
 esac
 
 exit "$EX_OK"
