@@ -1,29 +1,14 @@
 #!/bin/sh
-# shellcheck shell=sh
-
-set -eu
 
 PROGRAM=$(basename "$0")
 SCRIPT_PATH=$0
-
-EX_OK=0
-EX_USAGE=64
-EX_UNAVAILABLE=69
-EX_SOFTWARE=70
-
-fatal() {
-    message=$1
-    code=${2:-$EX_SOFTWARE}
-    printf '%s: %s\n' "$PROGRAM" "$message" >&2
-    exit "$code"
-}
 
 case "$SCRIPT_PATH" in
     */*)
         SCRIPT_SOURCE=$(dirname "$SCRIPT_PATH")
         ;;
     *)
-        LOOKUP=$(command -v -- "$SCRIPT_PATH" 2>/dev/null || printf '')
+        LOOKUP=$(command -v -- "$SCRIPT_PATH" 2>/dev/null)
         if [ -n "$LOOKUP" ]; then
             SCRIPT_SOURCE=$(dirname "$LOOKUP")
         else
@@ -33,13 +18,13 @@ case "$SCRIPT_PATH" in
 esac
 
 if ! SCRIPT_DIR=$(cd "$SCRIPT_SOURCE" 2>/dev/null && pwd); then
-    fatal 'unable to determine script directory' "$EX_SOFTWARE"
+    printf '%s: unable to determine script directory\n' "$PROGRAM" >&2
+    exit 1
 fi
 PROJECT_ROOT=$(dirname "$SCRIPT_DIR")
 VERSION_FILE="${PROJECT_ROOT}/VERSION"
 SHARE_VERSION_FILE='/usr/share/openwrt-extended-backup/VERSION'
-VERSION_FALLBACK='0.4.1'
-VERSION=''
+VERSION_FALLBACK='0.1.0'
 
 if [ -r "$VERSION_FILE" ]; then
     VERSION=$(head -n 1 "$VERSION_FILE")
@@ -89,35 +74,22 @@ SERVICES_TO_RESTART=''
 SERVICE_RESULTS=''
 PACKAGES_RESULT='skipped'
 PACKAGES_NOTE=''
-CLEANUP_DONE=0
 
 cleanup() {
-    status=$1
-
-    if [ "$CLEANUP_DONE" -eq 1 ]; then
-        exit "$status"
-    fi
-    CLEANUP_DONE=1
-
-    set +e
-
     if [ -n "$LIST_FILE" ] && [ -f "$LIST_FILE" ]; then
         rm -f "$LIST_FILE"
     fi
     if [ -n "$OVERWRITE_FILE_LIST" ] && [ -f "$OVERWRITE_FILE_LIST" ]; then
         rm -f "$OVERWRITE_FILE_LIST"
     fi
-
-    exit "$status"
 }
 
-trap 'cleanup $?' EXIT
-trap 'cleanup 130' INT
-trap 'cleanup 143' TERM
+trap cleanup EXIT INT TERM
 
 require_command() {
     if ! command -v "$1" >/dev/null 2>&1; then
-        fatal "требуемая утилита \"$1\" недоступна" "$EX_UNAVAILABLE"
+        printf '%s: требуемая утилита "%s" недоступна\n' "$PROGRAM" "$1" >&2
+        exit 1
     fi
 }
 
@@ -177,7 +149,8 @@ ensure_backup_dir() {
     TS=$(date +'%Y%m%d-%H%M%S')
     BACKUP_DIR="/tmp/openwrt-restore-backup-$TS"
     if ! mkdir -p "$BACKUP_DIR"; then
-        fatal "не удалось создать каталог резервных копий $BACKUP_DIR" "$EX_SOFTWARE"
+        printf '%s: не удалось создать каталог резервных копий %s\n' "$PROGRAM" "$BACKUP_DIR" >&2
+        exit 1
     fi
     BACKUP_LOG="$BACKUP_DIR/index.txt"
     printf '# файлы, перезаписанные openwrt_full_restore\n' >"$BACKUP_LOG"
@@ -236,7 +209,7 @@ maybe_run_packages() {
 }
 
 restart_services() {
-    SERVICES_TO_RESTART=$(printf '%s\n' "$SERVICES_TO_RESTART" | sed 's/^ //') || fatal 'Не удалось подготовить список служб к перезапуску' "$EX_SOFTWARE"
+    SERVICES_TO_RESTART=$(printf '%s\n' "$SERVICES_TO_RESTART" | sed 's/^ //')
     [ -z "$SERVICES_TO_RESTART" ] && return
 
     printf '\nПерезапуск служб...\n'
@@ -335,7 +308,8 @@ while [ $# -gt 0 ]; do
             opt=$1
             shift
             if [ $# -eq 0 ]; then
-                fatal "опция $opt требует путь к архиву" "$EX_USAGE"
+                printf '%s: опция %s требует путь к архиву\n' "$PROGRAM" "$opt" >&2
+                exit 1
             fi
             ARCHIVE_PATH=$1
             ;;
@@ -343,7 +317,8 @@ while [ $# -gt 0 ]; do
             opt=$1
             shift
             if [ $# -eq 0 ]; then
-                fatal "опция $opt требует путь к файлу" "$EX_USAGE"
+                printf '%s: опция %s требует путь к файлу\n' "$PROGRAM" "$opt" >&2
+                exit 1
             fi
             PACKAGES_PATH=$1
             ;;
@@ -355,13 +330,15 @@ while [ $# -gt 0 ]; do
             break
             ;;
         -*)
-            fatal "неизвестная опция $1" "$EX_USAGE"
+            printf '%s: неизвестная опция %s\n' "$PROGRAM" "$1" >&2
+            exit 1
             ;;
         *)
             if [ -z "$ARCHIVE_PATH" ]; then
                 ARCHIVE_PATH=$1
             else
-                fatal "лишний аргумент $1" "$EX_USAGE"
+                printf '%s: лишний аргумент %s\n' "$PROGRAM" "$1" >&2
+                exit 1
             fi
             ;;
     esac
@@ -373,12 +350,14 @@ if [ $# -gt 0 ]; then
         ARCHIVE_PATH=$1
         shift
     else
-        fatal "лишний аргумент $1" "$EX_USAGE"
+        printf '%s: лишний аргумент %s\n' "$PROGRAM" "$1" >&2
+        exit 1
     fi
 fi
 
 if [ $# -gt 0 ]; then
-    fatal 'лишние аргументы после пути к архиву' "$EX_USAGE"
+    printf '%s: лишние аргументы после пути к архиву\n' "$PROGRAM" >&2
+    exit 1
 fi
 
 if [ -z "$ARCHIVE_PATH" ]; then
@@ -387,7 +366,8 @@ if [ -z "$ARCHIVE_PATH" ]; then
 fi
 
 if [ -z "$ARCHIVE_PATH" ]; then
-    fatal 'архив не задан' "$EX_USAGE"
+    printf '%s: архив не задан\n' "$PROGRAM" >&2
+    exit 1
 fi
 
 require_command tar
@@ -395,16 +375,18 @@ require_command mkdir
 require_command cp
 
 if [ "$(id -u)" -ne 0 ]; then
-    fatal 'требуется запуск от root' "$EX_USAGE"
+    printf '%s: требуется запуск от root\n' "$PROGRAM" >&2
+    exit 1
 fi
 
 ARCHIVE_ABS=$(resolve_path "$ARCHIVE_PATH")
 if [ ! -r "$ARCHIVE_ABS" ]; then
-    fatal "архив $ARCHIVE_ABS недоступен для чтения" "$EX_UNAVAILABLE"
+    printf '%s: архив %s недоступен для чтения\n' "$PROGRAM" "$ARCHIVE_ABS" >&2
+    exit 1
 fi
 
-LIST_FILE=$(mktemp) || fatal 'Не удалось создать временный файл для списка архива' "$EX_SOFTWARE"
-OVERWRITE_FILE_LIST=$(mktemp) || fatal 'Не удалось создать временный файл для перезаписываемых путей' "$EX_SOFTWARE"
+LIST_FILE=$(mktemp)
+OVERWRITE_FILE_LIST=$(mktemp)
 TOTAL_ITEMS=0
 TOTAL_DIRS=0
 TOTAL_FILES=0
@@ -415,7 +397,8 @@ OVERWRITE_DIRS=0
 
 printf '%sПроверяем архив...%s\n' "$CYAN" "$NC"
 if ! tar -tzf "$ARCHIVE_ABS" >"$LIST_FILE"; then
-    fatal 'tar не смог прочитать архив (повреждённый файл?)' "$EX_SOFTWARE"
+    printf '%s: tar не смог прочитать архив (повреждённый файл?)\n' "$PROGRAM" >&2
+    exit 1
 fi
 
 printf '  Архив успешно прочитан, элементов: '
@@ -488,7 +471,7 @@ printf '  Каталогов в архиве:     %d\n' "$TOTAL_DIRS"
 printf '  Будет создано новых:    файлов %d, каталогов %d\n' "$NEW_FILES" "$NEW_DIRS"
 printf '  Требуют перезаписи:     файлов %d, каталогов %d\n' "$OVERWRITE_FILES" "$OVERWRITE_DIRS"
 
-SERVICES_TO_RESTART=$(printf '%s\n' "$SERVICES_TO_RESTART" | sed 's/^ //') || fatal 'Не удалось подготовить список служб к перезапуску' "$EX_SOFTWARE"
+SERVICES_TO_RESTART=$(printf '%s\n' "$SERVICES_TO_RESTART" | sed 's/^ //')
 if [ -n "$SERVICES_TO_RESTART" ]; then
     printf '  Затронуты службы:       %s\n' "$SERVICES_TO_RESTART"
 else
@@ -545,7 +528,7 @@ if tar -xzp -f "$ARCHIVE_ABS" -C / --same-owner; then
 else
     printf '⚠️  Ошибка при распаковке архива.\n' >&2
     printf '  Проверьте резервные копии в %s\n' "$BACKUP_DIR" >&2
-    fatal 'распаковка архива завершилась с ошибкой' "$EX_SOFTWARE"
+    exit 1
 fi
 
 sync
