@@ -1,0 +1,25 @@
+name: Post-release verify
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+concurrency:
+  group: post-release-verify-${{ github.ref == 'refs/heads/main' && 'main' || github.run_id }}
+  cancel-in-progress: ${{ github.ref == 'refs/heads/main' }}
+
+jobs:
+  verify:
+    name: Verify release metadata
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332 # v4.1.7
+
+      - name: Run post-release verification
+        run: ./scripts/ci/check-post-release.sh

@@ -18,6 +18,17 @@ Create branches that describe the type of work you are doing. We use the followi
 
 Use lowercase words separated by hyphens for the `<short-topic>` part (for example, `feature/add-backup-verification`).
 
+## Minimal contribution flow
+
+1. Create a topic branch from `main` using the naming scheme above.
+2. Make your changes and run `./scripts/ci/check-shell-quality.sh` locally.
+3. Push the branch to your fork (or the main repository if you have access) and open a pull request targeting `main`.
+4. Wait for the required checks to succeed:
+   - **Shell quality checks / Shell quality**;
+   - **Post-release verify / Verify release metadata**.
+5. Address review feedback. Changes to `scripts/` and `.github/workflows/` automatically request a maintainer review via `CODEOWNERS`.
+6. Merge only after the pull request is approved and all checks are green. Force pushes to `main` are blocked, so use the merge button once CI is finished.
+
 ## Local validation checklist
 
 Before opening a pull request:
@@ -35,13 +46,17 @@ Before opening a pull request:
 
 - Submit focused pull requests that address a single problem.
 - Fill out the pull request template completely, including testing notes.
-- Request at least one reviewer and respond to feedback promptly.
+- Request at least one reviewer and respond to feedback promptly. Pull requests that touch `scripts/` or `.github/workflows/` require an approval from the assigned maintainer via `CODEOWNERS`.
 - Avoid force-pushing once a review has started unless you are rebasing on top of the latest `main` or addressing review feedback. Mention significant rebases in a comment so reviewers can re-orient themselves.
 - Allow the automation to finish after the final approval; do not merge when required checks are still running or failing.
 
 ### Required status checks
 
-The repository enforces the **Shell quality checks / Shell quality** GitHub Action. Pull requests must be green on that check before merge. If new checks are added in the future, include them here so contributors know what is expected.
+The repository enforces the following GitHub Actions. Pull requests must be green on all of them before merge:
+- **Shell quality checks / Shell quality**
+- **Post-release verify / Verify release metadata**
+
+If new checks are added in the future, include them here so contributors know what is expected.
 
 ## Maintainer playbook
 
@@ -54,11 +69,12 @@ Branch protection has been configured for the `main` branch with the following s
 - **Required pull request reviews**: ✅ Enabled
   - Reviews required before merging: Yes
   - Dismiss stale reviews: Yes
-  - Require code owner reviews: No
+  - Require code owner reviews: Yes (enforced by `CODEOWNERS` for `scripts/` and `.github/workflows/`)
 
 - **Required status checks**: ✅ Configured
-  - Shell quality checks workflow required
-  - All CI checks must pass before merge
+  - Shell quality checks / Shell quality
+  - Post-release verify / Verify release metadata
+  - Branch must be up to date with `main` before merging
 
 - **Branch restrictions**: ✅ Configured
   - Force pushes: Disabled

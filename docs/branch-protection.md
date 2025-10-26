@@ -6,11 +6,12 @@ The following branch protection settings have been configured for the `main` bra
 - **Required pull request reviews**: ✅ Enabled
   - Reviews required before merging: Yes
   - Dismiss stale reviews: Yes
-  - Require code owner reviews: No
+  - Require code owner reviews: Yes (maintainers are assigned via `CODEOWNERS` for `scripts/` and `.github/workflows/`)
 
 - **Required status checks**: ✅ Configured
-  - Shell quality checks required
-  - CI workflows must pass
+  - Shell quality checks / Shell quality
+  - Post-release verify / Verify release metadata
+  - Branch must be up to date with `main` before merging
 
 - **Branch restrictions**: ✅ Configured
   - Force pushes: Disabled
