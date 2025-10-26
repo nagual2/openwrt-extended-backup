@@ -53,6 +53,23 @@
 
 Скрипты устанавливаются в `/usr/sbin/` и становятся доступны по именам `openwrt_full_backup`, `openwrt_full_restore` и `user_installed_packages`. По умолчанию вместе с пакетом будет установлена зависимость `ksmbd-tools`; чтобы исключить её, соберите пакет с параметром `WITH_KSMBD=0`.
 
+### Через opkg feed (GitHub Pages)
+1. Скачайте и установите ключ подписи:
+   ```sh
+   wget -O /etc/opkg/keys/436c5660da89cc6b.pub https://raw.githubusercontent.com/nagual2/openwrt-extended-backup/main/docs/opkg-feed-public.key
+   ```
+2. Добавьте feed в `/etc/opkg/customfeeds.conf`:
+   ```sh
+   echo 'src/gz openwrt_extended_backup https://nagual2.github.io/openwrt-extended-backup/packages/all' >> /etc/opkg/customfeeds.conf
+   ```
+3. Обновите индексы и установите пакет:
+   ```sh
+   opkg update
+   opkg install openwrt-extended-backup
+   ```
+
+> После первого `opkg update` вы должны увидеть, что feed `openwrt_extended_backup` загружен без предупреждений о подписи. Пакет собирается для архитектуры `all`, поэтому подходит для любой платформы OpenWrt. Если вы используете форк репозитория, замените URL на свой домен GitHub Pages.
+
 ### Ручная установка скриптов
 ```sh
 # Основной скрипт резервного копирования
