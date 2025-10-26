@@ -1,0 +1,7 @@
+bash
+htop
+luci-app-sqm
+luci-theme-material
+smartmontools
+tailscale
+luci-i18n-firewall-ru
