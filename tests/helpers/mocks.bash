@@ -24,6 +24,8 @@ mock_setup() {
   export MOCK_COMMAND_HANDLER_DIR="${BATS_TEST_TMPDIR}/command-handlers"
   mkdir -p "${MOCK_COMMAND_HANDLER_DIR}"
 
+  export MOCK_REAL_DATE="$(command -v date)"
+
   export MOCK_BIN_DIR="${BATS_TEST_TMPDIR}/mock-bin"
   mkdir -p "${MOCK_BIN_DIR}"
 
