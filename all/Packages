@@ -1,0 +1,12 @@
+Package: openwrt-extended-backup
+Version: 0.8.3-1
+Architecture: all
+Section: utils
+Priority: optional
+Maintainer: openwrt-extended-backup maintainers
+Depends: tar, ksmbd-tools
+Filename: openwrt-extended-backup_0.8.3-1_all.ipk
+Size: 10468
+SHA256sum: 47de2d2eb9b3b94c702f7c3b89ce406931af7a6d0f585502433d243986f30606
+Description: OpenWrt full backup helpers and user package listing scripts.
+
