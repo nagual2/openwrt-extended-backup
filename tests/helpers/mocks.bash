@@ -18,6 +18,9 @@ mock_setup() {
   export MOCK_WORKSPACE="${BATS_TEST_TMPDIR}/workspace"
   mkdir -p "${MOCK_WORKSPACE}"
 
+  export MOCK_TMP_DIR="${BATS_TEST_TMPDIR}/tmp"
+  mkdir -p "${MOCK_TMP_DIR}"
+
   export MOCK_COMMAND_LOG="${BATS_TEST_TMPDIR}/command.log"
   : >"${MOCK_COMMAND_LOG}"
 
@@ -56,6 +59,7 @@ mock_teardown() {
   rm -rf "${MOCK_BIN_DIR-}"
   rm -rf "${MOCK_COMMAND_HANDLER_DIR-}"
   rm -rf "${MOCK_FAKE_ROOT-}"
+  rm -rf "${MOCK_TMP_DIR-}"
   rm -rf "${MOCK_SMB_CLEANUP_DIR-}"
   rm -rf "${MOCK_WORKSPACE-}"
   rm -f "${MOCK_COMMAND_LOG-}"
@@ -65,6 +69,7 @@ mock_teardown() {
   unset MOCK_FIXTURES_DIR
   unset MOCK_TEMPLATE_BIN_DIR
   unset MOCK_WORKSPACE
+  unset MOCK_TMP_DIR
   unset MOCK_COMMAND_LOG
   unset MOCK_COMMAND_HANDLER_DIR
   unset MOCK_BIN_DIR
@@ -134,14 +139,27 @@ mock_run_backup() {
   script="$(mock_backup_script)"
   (
     cd "${MOCK_WORKSPACE}"
-    run env \
-      OPENWRT_RELEASE_PATH="${OPENWRT_RELEASE_PATH-}" \
-      KSMBD_INIT_SCRIPT="${KSMBD_INIT_SCRIPT-}" \
-      SMB_CLEANUP_DIR="${SMB_CLEANUP_DIR-}" \
-      MOCK_COMMAND_LOG="${MOCK_COMMAND_LOG}" \
-      MOCK_COMMAND_HANDLER_DIR="${MOCK_COMMAND_HANDLER_DIR}" \
-      PATH="${PATH}" \
-      "${script}" "$@"
+    if [ -n "${MOCK_BACKUP_SHELL-}" ]; then
+      run env \
+        OPENWRT_RELEASE_PATH="${OPENWRT_RELEASE_PATH-}" \
+        KSMBD_INIT_SCRIPT="${KSMBD_INIT_SCRIPT-}" \
+        SMB_CLEANUP_DIR="${SMB_CLEANUP_DIR-}" \
+        MOCK_COMMAND_LOG="${MOCK_COMMAND_LOG}" \
+        MOCK_COMMAND_HANDLER_DIR="${MOCK_COMMAND_HANDLER_DIR}" \
+        TMPDIR="${MOCK_TMP_DIR:-${BATS_TEST_TMPDIR}}" \
+        PATH="${PATH}" \
+        "${MOCK_BACKUP_SHELL}" "${script}" "$@"
+    else
+      run env \
+        OPENWRT_RELEASE_PATH="${OPENWRT_RELEASE_PATH-}" \
+        KSMBD_INIT_SCRIPT="${KSMBD_INIT_SCRIPT-}" \
+        SMB_CLEANUP_DIR="${SMB_CLEANUP_DIR-}" \
+        MOCK_COMMAND_LOG="${MOCK_COMMAND_LOG}" \
+        MOCK_COMMAND_HANDLER_DIR="${MOCK_COMMAND_HANDLER_DIR}" \
+        TMPDIR="${MOCK_TMP_DIR:-${BATS_TEST_TMPDIR}}" \
+        PATH="${PATH}" \
+        "${script}" "$@"
+    fi
   )
 }
 
