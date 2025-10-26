@@ -38,17 +38,19 @@
 ## Установка
 
 ### Через пакет .ipk
-1. Соберите пакет самостоятельно (см. раздел «Сборка пакета (.ipk)») или скачайте готовый файл `openwrt-extended-backup_*.ipk`.
+1. Соберите пакет самостоятельно (см. раздел «Сборка пакета (.ipk)») или скачайте готовый файл `ctoolkit_*.ipk`.
 2. Передайте его на роутер, например:
    ```sh
-   scp dist/openwrt-extended-backup_*.ipk root@<ip_роутера>:/tmp/
+   scp dist/ctoolkit_*.ipk root@<ip_роутера>:/tmp/
    ```
 3. Установите пакет:
    ```sh
-   opkg install /tmp/openwrt-extended-backup_*.ipk
+   opkg install /tmp/ctoolkit_*.ipk
    ```
 
-Скрипты устанавливаются в `/usr/sbin/` и становятся доступны по именам `openwrt_full_backup`, `openwrt_full_restore` и `user_installed_packages`. По умолчанию вместе с пакетом будет установлена зависимость `ksmbd-tools`; чтобы исключить её, соберите пакет с параметром `WITH_KSMBD=0`.
+Готовые сборки автоматически публикуются в разделе [GitHub Releases](https://github.com/nagual2/openwrt-extended-backup/releases) вместе с feed-индексом (`Packages.gz`) и файлами контрольных сумм.
+
+Скрипты устанавливаются в `/usr/bin/` и становятся доступны по именам `openwrt_full_backup`, `openwrt_full_restore` и `user_installed_packages`. По умолчанию вместе с пакетом будет установлена зависимость `ksmbd-tools`; чтобы исключить её, соберите пакет с параметром `WITH_KSMBD=0`.
 
 ### Ручная установка скриптов
 ```sh
@@ -70,17 +72,17 @@ chmod +x /usr/bin/user_installed_packages
 ## Сборка пакета (.ipk)
 
 ### Через OpenWrt buildroot/SDK
-1. Подключите репозиторий как feed (например, добавьте строку `src-git extended_backup https://github.com/nagual2/openwrt-extended-backup.git` в `feeds.conf`) или скопируйте каталог `openwrt/` из этого репозитория в `package/openwrt-extended-backup` внутри сборочной среды.
+1. Подключите репозиторий как feed (например, добавьте строку `src-git ctoolkit https://github.com/nagual2/openwrt-extended-backup.git` в `feeds.conf`) или скопируйте каталог `package/ctoolkit/` из этого репозитория в `package/ctoolkit` внутри сборочной среды.
 2. Если используете feeds, обновите и установите пакет:
    ```sh
-   ./scripts/feeds update extended_backup
-   ./scripts/feeds install openwrt-extended-backup
+   ./scripts/feeds update ctoolkit
+   ./scripts/feeds install ctoolkit
    ```
    При ручном копировании каталога этот шаг можно пропустить.
-3. При необходимости отключите зависимость `ksmbd-tools` через `make menuconfig` (Utilities → openwrt-extended-backup).
+3. При необходимости отключите зависимость `ksmbd-tools` через `make menuconfig` (Utilities → ctoolkit).
 4. Соберите пакет:
    ```sh
-   make package/openwrt-extended-backup/compile V=sc
+   make package/ctoolkit/compile V=sc
    ```
 
 Готовый `ipk` окажется в каталоге `bin/packages/<архитектура>/packages/`.
@@ -90,7 +92,7 @@ chmod +x /usr/bin/user_installed_packages
 В корне проекта доступен упрощённый `Makefile`:
 
 ```sh
-make ipk              # соберёт dist/openwrt-extended-backup_<версия>-1_all.ipk
+make ipk              # соберёт dist/ctoolkit_<версия>-1_all.ipk
 make ipk WITH_KSMBD=0 # исключить зависимость на ksmbd-tools
 make install          # установит пакет через opkg, если утилита доступна на хосте
 ```
