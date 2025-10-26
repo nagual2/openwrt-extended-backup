@@ -124,7 +124,8 @@ make install          # установит пакет через opkg, если 
 | `user_installed_packages` | `--status-file PATH` | Использует альтернативный `opkg` статус-файл (например, для тестов). |
 | `user_installed_packages` | `--user-installed-file PATH` | Добавляет пакеты из произвольного списка (по одному имени на строку). |
 | `user_installed_packages` | `-x`, `--exclude PATTERN` | Исключает пакеты по шаблону (аргумент можно повторять). |
-| `user_installed_packages` | `--include-auto-deps` | Включает зависимости, помеченные `Auto-Installed: yes`. |
+| `user_installed_packages` | `--include-auto-deps[=BOOL]` | Управляет добавлением зависимостей с `Auto-Installed: yes` (по умолчанию выключено). |
+| `user_installed_packages` | `--output PATH` | Записывает результат в указанный файл (используйте `-` для stdout). |
 | `user_installed_packages` | без аргументов | Анализирует текущую систему и выводит отсортированные команды `opkg update` и `opkg install …`. |
 
 ## Версионирование и релизы
@@ -168,7 +169,7 @@ openwrt_full_restore --yes --archive /tmp/fullbackup_OpenWrt_24.10.4_2024-10-20_
 user_installed_packages > /tmp/opkg-user-packages.sh
 scp root@192.168.1.1:/tmp/opkg-user-packages.sh ./
 ```
-Скрипт анализирует `/usr/lib/opkg/status`, исключает базовые пакеты с минимальным временем установки прошивки и зависимости, помеченные `Auto-Installed: yes`, а при наличии дополняет результат данными из списка `user-installed`. На выходе получается детерминированный список и готовые команды для переустановки:
+Скрипт анализирует `/usr/lib/opkg/status`, исключает базовые пакеты с минимальным временем установки прошивки и зависимости, помеченные `Auto-Installed: yes`, а при наличии дополняет результат данными из списка `user-installed`. Если статус-файл недоступен, утилита автоматически использует вывод `opkg list-installed`, чтобы сохранить работоспособность (в этом режиме `opkg` не сообщает флаг `Auto-Installed`, поэтому при необходимости используйте `--exclude`). На выходе получается детерминированный список и готовые команды для переустановки:
 
 ```text
 # user-installed opkg packages (7)
@@ -188,7 +189,7 @@ opkg install bash htop luci-app-sqm luci-theme-material smartmontools tailscale
 opkg install luci-i18n-firewall-ru
 ```
 
-Можно, например, скрыть локализации (`user_installed_packages --exclude 'luci-i18n-*'`) или вернуть зависимости, помеченные `Auto-Installed: yes` (`user_installed_packages --include-auto-deps`).
+Можно, например, скрыть локализации (`user_installed_packages --exclude 'luci-i18n-*'`), вернуть зависимости, помеченные `Auto-Installed: yes` (`user_installed_packages --include-auto-deps` или `--include-auto-deps=yes`), либо сразу записать команды в файл (`user_installed_packages --output /tmp/opkg-user-packages.sh`).
 
 ## Тестирование
 Фикстуры в `tests/fixtures/` и скрипт `tests/user_installed_packages_test.sh` проверяют сценарии генерации списка пакетов end-to-end. Тесты запускаются в CI и помогают избежать регрессий.
