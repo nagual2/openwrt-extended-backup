@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file.
 
 Tagged releases are published via GitHub Actions and update this changelog alongside the release artifacts.
 
+## [Unreleased]
+
+### Changed
+
+- Finalise the post-refactor layout: runtime scripts now live in `scripts/`, `openwrt_full_restore` is a thin launcher for the new `openwrt_restore` CLI, and release artifacts only contain the runtime files plus documentation.
+- Refresh README guidance to match the streamlined CLI and surface build targets for contributors.
+- Keep previous refactor notes: the backup CLI focuses on core flags with safer tar usage, and `user_installed_packages` adds opkg fallbacks, stricter filtering, and output file support.
+
 ## [0.8.3](https://github.com/nagual2/openwrt-extended-backup/compare/v0.8.2...v0.8.3) (2025-10-24)
 
 ### Bug Fixes
@@ -55,11 +63,3 @@ Tagged releases are published via GitHub Actions and update this changelog along
 - Added optional SMB export orchestration through ksmbd, including automatic share provisioning, credential management, and recycling of existing shares when present.
 - Introduced user_installed_packages to generate deterministic reinstall scripts for manually installed opkg packages with grouping, filtering, and support for supplemental package lists.
 - Added automated formatting (shfmt), Bats-based tests, and documentation to support ongoing work on the scripts.
-
-## [Unreleased]
-
-### Changed
-
-- **backup:** simplify CLI to core flags, add safer tar creation, and make SMB export optional by default.
-- **user_installed_packages:** refactor status parsing with opkg fallback, stricter filtering, excludes, and new output file option.
-
