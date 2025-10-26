@@ -7,37 +7,37 @@ PROGRAM=$(basename "$0")
 SCRIPT_PATH=$0
 
 case "$SCRIPT_PATH" in
-  */*)
-    SCRIPT_SOURCE=$(dirname "$SCRIPT_PATH")
-    ;;
-  *)
-    LOOKUP=$(command -v -- "$SCRIPT_PATH" 2> /dev/null || printf '')
-    if [ -n "$LOOKUP" ]; then
-      SCRIPT_SOURCE=$(dirname "$LOOKUP")
-    else
-      SCRIPT_SOURCE='.'
-    fi
-    ;;
+    */*)
+        SCRIPT_SOURCE=$(dirname "$SCRIPT_PATH")
+        ;;
+    *)
+        LOOKUP=$(command -v -- "$SCRIPT_PATH" 2>/dev/null || printf '')
+        if [ -n "$LOOKUP" ]; then
+            SCRIPT_SOURCE=$(dirname "$LOOKUP")
+        else
+            SCRIPT_SOURCE='.'
+        fi
+        ;;
 esac
 
-if ! SCRIPT_DIR=$(cd "$SCRIPT_SOURCE" 2> /dev/null && pwd); then
-  printf '%s: unable to determine script directory\n' "$PROGRAM" >&2
-  exit 1
+if ! SCRIPT_DIR=$(cd "$SCRIPT_SOURCE" 2>/dev/null && pwd); then
+    printf '%s: unable to determine script directory\n' "$PROGRAM" >&2
+    exit 1
 fi
 PROJECT_ROOT=$(dirname "$SCRIPT_DIR")
 VERSION_FILE="${PROJECT_ROOT}/VERSION"
 SHARE_VERSION_FILE='/usr/share/openwrt-extended-backup/VERSION'
-VERSION_FALLBACK='0.1.0'
+VERSION_FALLBACK='0.4.1'
 VERSION=''
 
 if [ -r "$VERSION_FILE" ]; then
-  VERSION=$(head -n 1 "$VERSION_FILE")
+    VERSION=$(head -n 1 "$VERSION_FILE")
 elif [ -r "$SHARE_VERSION_FILE" ]; then
-  VERSION=$(head -n 1 "$SHARE_VERSION_FILE")
+    VERSION=$(head -n 1 "$SHARE_VERSION_FILE")
 fi
 
 if [ -z "$VERSION" ]; then
-  VERSION=$VERSION_FALLBACK
+    VERSION=$VERSION_FALLBACK
 fi
 
 EX_OK=0
@@ -50,22 +50,18 @@ STATUS_FILE=$DEFAULT_STATUS_FILE
 USER_INSTALLED_FILE=''
 INCLUDE_AUTO_DEPS=0
 EXCLUDE_PATTERNS=''
-OUTPUT_FILE=''
-OUTPUT_FORMAT='opkg'
 
 show_version() {
-  printf '%s version %s\n' "$PROGRAM" "$VERSION"
+    printf '%s version %s\n' "$PROGRAM" "$VERSION"
 }
 
 usage() {
-  cat << EOF
+    cat <<EOF
 Использование: $PROGRAM [ОПЦИИ]
 
 Опции:
       --status-file PATH         Использовать альтернативный status-файл opkg (по умолчанию $DEFAULT_STATUS_FILE)
       --user-installed-file PATH Добавить пакеты из произвольного списка (по одному имени на строку)
-      --output PATH              Записать результат в указанный файл вместо stdout
-      --format {opkg,plain}      Выбрать формат вывода (opkg или plain; по умолчанию opkg)
   -x, --exclude PATTERN          Исключить пакеты по шаблону (опцию можно указать несколько раз)
       --include-auto-deps        Включить зависимости с Auto-Installed: yes
   -h, --help                     Показать эту справку и выйти
@@ -74,100 +70,51 @@ EOF
 }
 
 fatal() {
-  message=$1
-  code=${2:-$EX_SOFTWARE}
-  printf '%s: %s\n' "$PROGRAM" "$message" >&2
-  exit "$code"
+    message=$1
+    code=${2:-$EX_SOFTWARE}
+    printf '%s: %s\n' "$PROGRAM" "$message" >&2
+    exit "$code"
 }
 
 append_exclude_pattern() {
-  pattern=$1
-  if [ -z "$pattern" ]; then
-    return
-  fi
+    pattern=$1
+    if [ -z "$pattern" ]; then
+        return
+    fi
 
-  if [ -z "$EXCLUDE_PATTERNS" ]; then
-    EXCLUDE_PATTERNS=$pattern
-  else
-    EXCLUDE_PATTERNS=$(printf '%s\n%s' "$EXCLUDE_PATTERNS" "$pattern")
-  fi
-}
-
-set_output_format() {
-    value=$1
-    case "$value" in
-        opkg | plain)
-            OUTPUT_FORMAT=$value
-            ;;
-        *)
-            fatal 'Опция --format поддерживает только значения opkg или plain' "$EX_USAGE"
-            ;;
-    esac
+    if [ -z "$EXCLUDE_PATTERNS" ]; then
+        EXCLUDE_PATTERNS=$pattern
+    else
+        EXCLUDE_PATTERNS=$(printf '%s\n%s' "$EXCLUDE_PATTERNS" "$pattern")
+    fi
 }
 
 should_exclude() {
-  pkg=$1
-  if [ -z "$EXCLUDE_PATTERNS" ]; then
-    return 1
-  fi
-
-  old_ifs=$IFS
-  IFS='
-'
-  for pattern in $EXCLUDE_PATTERNS; do
-    if [ -z "$pattern" ]; then
-      continue
+    pkg=$1
+    if [ -z "$EXCLUDE_PATTERNS" ]; then
+        return 1
     fi
-    # shellcheck disable=SC2254 # patterns are treated as glob expressions for matching
-    case "$pkg" in
-      $pattern)
-        IFS=$old_ifs
-        return 0
-        ;;
-    esac
-  done
-  IFS=$old_ifs
-  return 1
-}
 
-emit_output() {
-    case "$OUTPUT_FORMAT" in
-        opkg)
-            printf '# user-installed opkg packages (%d)\n' "$TOTAL_COUNT"
-            printf '# main packages (%d)\n' "$MAIN_COUNT"
-            if [ "$MAIN_COUNT" -gt 0 ]; then
-                printf '%s\n' "$MAIN_LINES"
-            fi
-            printf '\n'
-            if [ "$LUCI_COUNT" -gt 0 ]; then
-                printf '# LuCI translations (%d)\n' "$LUCI_COUNT"
-                printf '%s\n' "$LUCI_LINES"
-                printf '\n'
-            fi
-            printf 'opkg update\n'
-            if [ "$MAIN_COUNT" -gt 0 ]; then
-                printf 'opkg install %s\n' "$MAIN_ARGS"
-            fi
-            if [ "$LUCI_COUNT" -gt 0 ]; then
-                printf 'opkg install %s\n' "$LUCI_ARGS"
-            fi
-            ;;
-        plain)
-            if [ "$MAIN_COUNT" -gt 0 ]; then
-                printf '%s\n' "$MAIN_LINES"
-            fi
-            if [ "$LUCI_COUNT" -gt 0 ]; then
-                printf '%s\n' "$LUCI_LINES"
-            fi
-            ;;
-        *)
-            fatal "Неизвестный формат вывода: $OUTPUT_FORMAT" "$EX_SOFTWARE"
-            ;;
-    esac
+    old_ifs=$IFS
+    IFS='
+'
+    for pattern in $EXCLUDE_PATTERNS; do
+        if [ -z "$pattern" ]; then
+            continue
+        fi
+        # shellcheck disable=SC2254 # patterns are treated as glob expressions for matching
+        case "$pkg" in
+            $pattern)
+                IFS=$old_ifs
+                return 0
+                ;;
+        esac
+    done
+    IFS=$old_ifs
+    return 1
 }
 
 parse_args() {
-<<<<<<< HEAD
     while [ $# -gt 0 ]; do
         case "$1" in
             -h | --help)
@@ -197,26 +144,6 @@ parse_args() {
                 ;;
             --user-installed-file=*)
                 USER_INSTALLED_FILE=${1#--user-installed-file=}
-                ;;
-            --output)
-                if [ $# -lt 2 ]; then
-                    fatal 'Опция --output требует указать путь' "$EX_USAGE"
-                fi
-                OUTPUT_FILE=$2
-                shift
-                ;;
-            --output=*)
-                OUTPUT_FILE=${1#--output=}
-                ;;
-            --format)
-                if [ $# -lt 2 ]; then
-                    fatal 'Опция --format требует указать значение (opkg или plain)' "$EX_USAGE"
-                fi
-                set_output_format "$2"
-                shift
-                ;;
-            --format=*)
-                set_output_format "${1#--format=}"
                 ;;
             -x)
                 if [ $# -lt 2 ]; then
@@ -253,89 +180,22 @@ parse_args() {
                 fatal "Неизвестная опция: $1" "$EX_USAGE"
                 ;;
         esac
-=======
-  while [ $# -gt 0 ]; do
-    case "$1" in
-      -h | --help)
-        usage
-        exit "$EX_OK"
-        ;;
-      -V | --version)
-        show_version
-        exit "$EX_OK"
-        ;;
-      --status-file)
-        if [ $# -lt 2 ]; then
-          fatal 'Опция --status-file требует указать путь' "$EX_USAGE"
-        fi
-        STATUS_FILE=$2
->>>>>>> origin/merge-tasks-1-15-into-main-e01
         shift
-        ;;
-      --status-file=*)
-        STATUS_FILE=${1#--status-file=}
-        ;;
-      --user-installed-file)
-        if [ $# -lt 2 ]; then
-          fatal 'Опция --user-installed-file требует указать путь' "$EX_USAGE"
-        fi
-        USER_INSTALLED_FILE=$2
-        shift
-        ;;
-      --user-installed-file=*)
-        USER_INSTALLED_FILE=${1#--user-installed-file=}
-        ;;
-      -x)
-        if [ $# -lt 2 ]; then
-          fatal 'Опция -x требует указать шаблон' "$EX_USAGE"
-        fi
-        append_exclude_pattern "$2"
-        shift
-        ;;
-      --exclude)
-        if [ $# -lt 2 ]; then
-          fatal 'Опция --exclude требует указать шаблон' "$EX_USAGE"
-        fi
-        append_exclude_pattern "$2"
-        shift
-        ;;
-      --exclude=*)
-        append_exclude_pattern "${1#--exclude=}"
-        ;;
-      --include-auto-deps)
-        INCLUDE_AUTO_DEPS=1
-        ;;
-      --include-auto-deps=*)
-        value=${1#--include-auto-deps=}
-        case "$value" in
-          '' | 0 | false | no | off)
-            INCLUDE_AUTO_DEPS=0
-            ;;
-          *)
-            INCLUDE_AUTO_DEPS=1
-            ;;
-        esac
-        ;;
-      *)
-        fatal "Неизвестная опция: $1" "$EX_USAGE"
-        ;;
-    esac
-    shift
-  done
+    done
 }
 
 parse_args "$@"
 
 if [ -z "$STATUS_FILE" ]; then
-  fatal 'Путь к status-файлу не указан' "$EX_USAGE"
+    fatal 'Путь к status-файлу не указан' "$EX_USAGE"
 fi
 
 if [ ! -r "$STATUS_FILE" ]; then
-  fatal "Не удалось прочитать status-файл: $STATUS_FILE" "$EX_UNAVAILABLE"
+    fatal "Не удалось прочитать status-файл: $STATUS_FILE" "$EX_UNAVAILABLE"
 fi
 
 if [ -n "$USER_INSTALLED_FILE" ] && [ ! -r "$USER_INSTALLED_FILE" ]; then
-  fatal "Не удалось прочитать список вручную установленных пакетов: $USER_INSTALLED_FILE" "$EX_UNAVAILABLE"
+    fatal "Не удалось прочитать список вручную установленных пакетов: $USER_INSTALLED_FILE" "$EX_UNAVAILABLE"
 fi
 
 DISTRI_TIME=$(awk '
@@ -350,10 +210,10 @@ DISTRI_TIME=$(awk '
             print min
         }
     }
-' "$STATUS_FILE")
+' "$STATUS_FILE") || fatal 'Не удалось разобрать status-файл opkg' "$EX_SOFTWARE"
 
 if [ -z "$DISTRI_TIME" ]; then
-  DISTRI_TIME=0
+    DISTRI_TIME=0
 fi
 
 STATUS_PACKAGES=$(awk -v include_auto="$INCLUDE_AUTO_DEPS" -v min_time="$DISTRI_TIME" '
@@ -408,11 +268,11 @@ STATUS_PACKAGES=$(awk -v include_auto="$INCLUDE_AUTO_DEPS" -v min_time="$DISTRI_
         }
         print pkg
     }
-' "$STATUS_FILE" | sort -u)
+' "$STATUS_FILE" | sort -u) || fatal 'Не удалось сформировать список пакетов из status-файла' "$EX_SOFTWARE"
 
 USER_PACKAGES=''
 if [ -n "$USER_INSTALLED_FILE" ]; then
-  USER_PACKAGES=$(awk '
+    USER_PACKAGES=$(awk '
         {
             gsub(/\r$/, "")
             sub(/[[:space:]]*#.*$/, "")
@@ -422,17 +282,17 @@ if [ -n "$USER_INSTALLED_FILE" ]; then
                 print $0
             }
         }
-    ' "$USER_INSTALLED_FILE" | sort -u)
+    ' "$USER_INSTALLED_FILE" | sort -u) || fatal 'Не удалось обработать пользовательский список пакетов' "$EX_SOFTWARE"
 fi
 
 COMBINED_PACKAGES=$({
-  if [ -n "$STATUS_PACKAGES" ]; then
-    printf '%s\n' "$STATUS_PACKAGES"
-  fi
-  if [ -n "$USER_PACKAGES" ]; then
-    printf '%s\n' "$USER_PACKAGES"
-  fi
-} | awk 'NF' | sort -u)
+    if [ -n "$STATUS_PACKAGES" ]; then
+        printf '%s\n' "$STATUS_PACKAGES"
+    fi
+    if [ -n "$USER_PACKAGES" ]; then
+        printf '%s\n' "$USER_PACKAGES"
+    fi
+} | awk 'NF' | sort -u) || fatal 'Не удалось объединить списки пакетов' "$EX_SOFTWARE"
 
 MAIN_LINES=''
 MAIN_ARGS=''
@@ -442,70 +302,61 @@ LUCI_ARGS=''
 LUCI_COUNT=0
 
 if [ -n "$COMBINED_PACKAGES" ]; then
-  while IFS= read -r pkg; do
-    [ -z "$pkg" ] && continue
-    if should_exclude "$pkg"; then
-      continue
-    fi
-    case "$pkg" in
-      luci-i18n-*)
-        LUCI_COUNT=$((LUCI_COUNT + 1))
-        if [ -z "$LUCI_LINES" ]; then
-          LUCI_LINES=$pkg
-        else
-          LUCI_LINES=$(printf '%s\n%s' "$LUCI_LINES" "$pkg")
+    while IFS= read -r pkg; do
+        [ -z "$pkg" ] && continue
+        if should_exclude "$pkg"; then
+            continue
         fi
-        if [ -z "$LUCI_ARGS" ]; then
-          LUCI_ARGS=$pkg
-        else
-          LUCI_ARGS="$LUCI_ARGS $pkg"
-        fi
-        ;;
-      *)
-        MAIN_COUNT=$((MAIN_COUNT + 1))
-        if [ -z "$MAIN_LINES" ]; then
-          MAIN_LINES=$pkg
-        else
-          MAIN_LINES=$(printf '%s\n%s' "$MAIN_LINES" "$pkg")
-        fi
-        if [ -z "$MAIN_ARGS" ]; then
-          MAIN_ARGS=$pkg
-        else
-          MAIN_ARGS="$MAIN_ARGS $pkg"
-        fi
-        ;;
-    esac
-  done << EOF
+        case "$pkg" in
+            luci-i18n-*)
+                LUCI_COUNT=$((LUCI_COUNT + 1))
+                if [ -z "$LUCI_LINES" ]; then
+                    LUCI_LINES=$pkg
+                else
+                    LUCI_LINES=$(printf '%s\n%s' "$LUCI_LINES" "$pkg")
+                fi
+                if [ -z "$LUCI_ARGS" ]; then
+                    LUCI_ARGS=$pkg
+                else
+                    LUCI_ARGS="$LUCI_ARGS $pkg"
+                fi
+                ;;
+            *)
+                MAIN_COUNT=$((MAIN_COUNT + 1))
+                if [ -z "$MAIN_LINES" ]; then
+                    MAIN_LINES=$pkg
+                else
+                    MAIN_LINES=$(printf '%s\n%s' "$MAIN_LINES" "$pkg")
+                fi
+                if [ -z "$MAIN_ARGS" ]; then
+                    MAIN_ARGS=$pkg
+                else
+                    MAIN_ARGS="$MAIN_ARGS $pkg"
+                fi
+                ;;
+        esac
+    done <<EOF
 $COMBINED_PACKAGES
 EOF
 fi
 
 TOTAL_COUNT=$((MAIN_COUNT + LUCI_COUNT))
 
-<<<<<<< HEAD
-if [ -n "$OUTPUT_FILE" ] && [ "$OUTPUT_FILE" != '-' ]; then
-    if ! emit_output >"$OUTPUT_FILE"; then
-        fatal "Не удалось записать результат в файл: $OUTPUT_FILE" "$EX_UNAVAILABLE"
-    fi
-else
-    emit_output
-=======
 printf '# user-installed opkg packages (%d)\n' "$TOTAL_COUNT"
 printf '# main packages (%d)\n' "$MAIN_COUNT"
 if [ "$MAIN_COUNT" -gt 0 ]; then
-  printf '%s\n' "$MAIN_LINES"
+    printf '%s\n' "$MAIN_LINES"
 fi
 printf '\n'
 if [ "$LUCI_COUNT" -gt 0 ]; then
-  printf '# LuCI translations (%d)\n' "$LUCI_COUNT"
-  printf '%s\n' "$LUCI_LINES"
-  printf '\n'
+    printf '# LuCI translations (%d)\n' "$LUCI_COUNT"
+    printf '%s\n' "$LUCI_LINES"
+    printf '\n'
 fi
 printf 'opkg update\n'
 if [ "$MAIN_COUNT" -gt 0 ]; then
-  printf 'opkg install %s\n' "$MAIN_ARGS"
+    printf 'opkg install %s\n' "$MAIN_ARGS"
 fi
 if [ "$LUCI_COUNT" -gt 0 ]; then
-  printf 'opkg install %s\n' "$LUCI_ARGS"
->>>>>>> origin/merge-tasks-1-15-into-main-e01
+    printf 'opkg install %s\n' "$LUCI_ARGS"
 fi
