@@ -1,0 +1,55 @@
+#!/bin/sh
+set -eu
+
+SCRIPT_DIR=$(dirname "$0")
+# shellcheck source=/dev/null
+. "$SCRIPT_DIR/_mock"
+
+command_name='uci'
+mock_run_default "$command_name" "$@"
+
+quiet=0
+if [ "$#" -gt 0 ] && [ "$1" = '-q' ]; then
+    quiet=1
+    shift
+fi
+
+if [ "$#" -eq 0 ]; then
+    exit 0
+fi
+
+subcommand="$1"
+shift
+
+case "$subcommand" in
+    show)
+        target=${1-}
+        if [ "$target" = 'ksmbd' ] && [ -n "${MOCK_UCI_SHOW_KSMBD-}" ]; then
+            printf '%s\n' "$MOCK_UCI_SHOW_KSMBD"
+        fi
+        ;;
+    get)
+        key=${1-}
+        if [ -n "$key" ]; then
+            norm=$(mock_normalize "$key")
+            value=$(mock_get_env "MOCK_UCI_GET_${norm}")
+            if [ -n "$value" ]; then
+                printf '%s\n' "$value"
+            fi
+        fi
+        ;;
+    add)
+        # simulate creation of a new section; output suppressed by callers
+        if [ "$quiet" -eq 0 ]; then
+            printf 'cfg%04d\n' $$
+        fi
+        ;;
+    set|delete|commit)
+        :
+        ;;
+    *)
+        :
+        ;;
+esac
+
+exit 0

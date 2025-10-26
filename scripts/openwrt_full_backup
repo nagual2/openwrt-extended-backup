@@ -39,6 +39,10 @@ if [ -z "${VERSION-}" ]; then
     VERSION=$VERSION_FALLBACK
 fi
 
+OPENWRT_RELEASE_PATH=${OPENWRT_RELEASE_PATH:-/etc/openwrt_release}
+KSMBD_INIT_SCRIPT=${KSMBD_INIT_SCRIPT:-/etc/init.d/ksmbd}
+SMB_CLEANUP_DIR=${SMB_CLEANUP_DIR:-}
+
 show_version() {
     printf '%s version %s\n' "$PROGRAM" "$VERSION"
 }
@@ -158,6 +162,14 @@ to_absolute_path() {
     esac
 }
 
+smb_cleanup_dir() {
+    if [ -n "$SMB_CLEANUP_DIR" ]; then
+        printf '%s\n' "$SMB_CLEANUP_DIR"
+    else
+        printf '%s/openwrt-full-backup-cleanup\n' "${OUT_DIR%/}"
+    fi
+}
+
 find_share_index_by_name() {
     name=$1
     share_indexes=$(uci -q show ksmbd | sed -n 's/^ksmbd\.@share\[\([0-9]\+\)\]=share$/\1/p')
@@ -176,8 +188,8 @@ remove_smb_share() {
     if [ -n "$idx" ]; then
         uci delete "ksmbd.@share[$idx]" >/dev/null 2>&1 || true
         uci commit ksmbd >/dev/null 2>&1 || true
-        if [ -x /etc/init.d/ksmbd ]; then
-            /etc/init.d/ksmbd restart >/dev/null 2>&1 || true
+        if [ -x "$KSMBD_INIT_SCRIPT" ]; then
+            "$KSMBD_INIT_SCRIPT" restart >/dev/null 2>&1 || true
         fi
     fi
 }
@@ -314,8 +326,8 @@ sanitize_token() {
 }
 
 get_firmware_tag() {
-    if [ -r /etc/openwrt_release ]; then
-        desc=$(grep "^DISTRIB_DESCRIPTION='" /etc/openwrt_release 2>/dev/null | head -n 1)
+    if [ -r "$OPENWRT_RELEASE_PATH" ]; then
+        desc=$(grep "^DISTRIB_DESCRIPTION='" "$OPENWRT_RELEASE_PATH" 2>/dev/null | head -n 1)
         if [ -n "$desc" ]; then
             value=$(printf '%s' "$desc" | cut -d"'" -f2)
             if [ -n "$value" ]; then
@@ -332,6 +344,10 @@ get_firmware_tag() {
 }
 
 prepare_environment() {
+    if [ ! -r "$OPENWRT_RELEASE_PATH" ]; then
+        fatal "Не найден файл описания прошивки: $OPENWRT_RELEASE_PATH" "$EX_UNAVAILABLE"
+    fi
+
     require_command tar
     require_command date
 
@@ -413,8 +429,8 @@ create_archive() {
 ensure_ksmbd_dependencies() {
     require_command ksmbd.adduser
     require_command uci
-    if [ ! -x /etc/init.d/ksmbd ]; then
-        fatal 'Служба ksmbd недоступна (нет /etc/init.d/ksmbd)' "$EX_UNAVAILABLE"
+    if [ ! -x "$KSMBD_INIT_SCRIPT" ]; then
+        fatal "Служба ksmbd недоступна (нет $KSMBD_INIT_SCRIPT)" "$EX_UNAVAILABLE"
     fi
 
     if command -v ksmbd.status >/dev/null 2>&1; then
@@ -431,6 +447,74 @@ generate_password() {
         fi
     fi
     printf 'owrt_%s\n' "$(date +'%H%M%S')"
+}
+
+create_smb_cleanup_hooks() {
+    cleanup_path=$(smb_cleanup_dir)
+    if [ -z "$cleanup_path" ]; then
+        return
+    fi
+
+    if ! mkdir -p "$cleanup_path"; then
+        log_error "Не удалось подготовить каталог очистки SMB: $cleanup_path"
+        return
+    fi
+
+    share_hook="$cleanup_path/remove_ksmbd_share.sh"
+    cat >"$share_hook" <<EOF
+#!/bin/sh
+set -eu
+
+share_name='$KSMBD_SHARE_NAME'
+init_script='$KSMBD_INIT_SCRIPT'
+
+share_indexes=
+    \\$(uci -q show ksmbd 2>/dev/null | sed -n 's/^ksmbd\\.@share\\[\\([0-9]\\+\\)\\]=share$/\\1/p')
+for idx in \\$share_indexes; do
+    current=\\$(uci -q get "ksmbd.@share[\\$idx].name" 2>/dev/null || printf '')
+    if [ "\\$current" = "\\$share_name" ]; then
+        uci delete "ksmbd.@share[\\$idx]" >/dev/null 2>&1 || true
+        uci commit ksmbd >/dev/null 2>&1 || true
+        if [ -x "\\$init_script" ]; then
+            "\\$init_script" restart >/dev/null 2>&1 || true
+        fi
+        printf 'Удалена временная SMB-шара %s\\n' "\\$share_name"
+        exit 0
+    fi
+done
+
+printf 'SMB-шара %s не найдена\\n' "\\$share_name" >&2
+exit 0
+EOF
+    chmod +x "$share_hook"
+
+    user_hook="$cleanup_path/remove_ksmbd_user.sh"
+    cat >"$user_hook" <<EOF
+#!/bin/sh
+set -eu
+
+user='$KSMBD_USER'
+
+if command -v ksmbd.deluser >/dev/null 2>&1; then
+    if ksmbd.deluser "\\$user" >/dev/null 2>&1; then
+        printf 'Удалён временный SMB-пользователь %s\\n' "\\$user"
+    else
+        printf 'Не удалось удалить SMB-пользователя %s\\n' "\\$user" >&2
+    fi
+else
+    printf 'Утилита ksmbd.deluser недоступна\\n' >&2
+fi
+EOF
+    chmod +x "$user_hook"
+
+    readme="$cleanup_path/README.txt"
+    cat >"$readme" <<EOF
+Эти файлы созданы openwrt_full_backup для удаления временной SMB-конфигурации.
+Сначала выполните remove_ksmbd_share.sh, чтобы убрать шару '$KSMBD_SHARE_NAME' (директория: $OUT_DIR).
+Затем выполните remove_ksmbd_user.sh, чтобы удалить пользователя '$KSMBD_USER'.
+EOF
+
+    log_info "Добавлены скрипты очистки SMB: $cleanup_path"
 }
 
 setup_smb_export() {

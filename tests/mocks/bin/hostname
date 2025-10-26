@@ -1,0 +1,17 @@
+#!/bin/sh
+set -eu
+
+SCRIPT_DIR=$(dirname "$0")
+# shellcheck source=/dev/null
+. "$SCRIPT_DIR/_mock"
+
+command_name='hostname'
+mock_run_default "$command_name" "$@"
+
+if [ -n "${MOCK_HOSTNAME_VALUE-}" ]; then
+    printf '%s\n' "$MOCK_HOSTNAME_VALUE"
+else
+    printf 'mock-router\n'
+fi
+
+exit 0

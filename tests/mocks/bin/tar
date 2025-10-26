@@ -1,0 +1,25 @@
+#!/bin/sh
+set -eu
+
+SCRIPT_DIR=$(dirname "$0")
+# shellcheck source=/dev/null
+. "$SCRIPT_DIR/_mock"
+
+command_name='tar'
+mock_run_default "$command_name" "$@"
+
+archive_path=''
+if [ "$#" -ge 2 ]; then
+    case "$1" in
+        -*f*)
+            archive_path="$2"
+            ;;
+    esac
+fi
+
+if [ -n "$archive_path" ]; then
+    mkdir -p "$(dirname "$archive_path")"
+    : >"$archive_path"
+fi
+
+exit 0
