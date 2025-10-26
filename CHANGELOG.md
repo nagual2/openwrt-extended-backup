@@ -4,16 +4,6 @@ All notable changes to this project will be documented in this file.
 
 The release workflow is driven by [release-please](https://github.com/googleapis/release-please) and will update this changelog automatically.
 
-## [0.9.0](https://github.com/nagual2/openwrt-extended-backup/compare/v0.8.3...v0.9.0) (2025-10-26)
-
-### Features
-
-* **backup:** add dry-run mode and --output option to openwrt_full_backup
-* **backup:** add dry-run output tests and validation
-* **backup:** add SCP/SFTP upload for remote backup export
-* **ci:** publish signed opkg feed to GitHub Pages on release tag
-* **helpers:** add install/uninstall scripts with BATS tests
-
 ## [0.8.3](https://github.com/nagual2/openwrt-extended-backup/compare/v0.8.2...v0.8.3) (2025-10-24)
 
 ### Bug Fixes
