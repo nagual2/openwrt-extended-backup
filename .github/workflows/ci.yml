@@ -1,0 +1,39 @@
+name: Continuous Integration
+
+on:
+  push:
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref == 'refs/heads/main' && 'main' || github.run_id }}
+  cancel-in-progress: ${{ github.ref == 'refs/heads/main' }}
+
+jobs:
+  tests:
+    name: Tests (${{ matrix.shell_label }})
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - shell_label: /bin/sh (dash)
+            shell_binary: /bin/sh
+          - shell_label: dash
+            shell_binary: dash
+          - shell_label: busybox ash
+            shell_binary: busybox ash
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332 # v4.1.7
+
+      - name: Install busybox
+        if: contains(matrix.shell_binary, 'busybox')
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends busybox
+
+      - name: Run user_installed_packages tests
+        run: ${{ matrix.shell_binary }} ./tests/user_installed_packages_test.sh
