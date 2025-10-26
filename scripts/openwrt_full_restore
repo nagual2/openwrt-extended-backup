@@ -24,12 +24,36 @@ fi
 PROJECT_ROOT=$(dirname "$SCRIPT_DIR")
 VERSION_FILE="${PROJECT_ROOT}/VERSION"
 SHARE_VERSION_FILE='/usr/share/openwrt-extended-backup/VERSION'
-VERSION_FALLBACK='0.2.0'
+CHANGELOG_FILE="${PROJECT_ROOT}/CHANGELOG.md"
+VERSION_FALLBACK='0.0.0'
+VERSION=''
+
+read_version_from_changelog() {
+    file=$1
+    if [ ! -r "$file" ]; then
+        return 0
+    fi
+
+    awk '
+        /^## \[[0-9]+\.[0-9]+\.[0-9]+\]/ {
+            line = $0
+            sub(/^## \[/, "", line)
+            sub(/\].*$/, "", line)
+            print line
+            exit
+        }
+    ' "$file"
+}
 
 if [ -r "$VERSION_FILE" ]; then
     VERSION=$(head -n 1 "$VERSION_FILE")
 elif [ -r "$SHARE_VERSION_FILE" ]; then
     VERSION=$(head -n 1 "$SHARE_VERSION_FILE")
+else
+    changelog_version=$(read_version_from_changelog "$CHANGELOG_FILE")
+    if [ -n "$changelog_version" ]; then
+        VERSION=$changelog_version
+    fi
 fi
 
 if [ -z "$VERSION" ]; then

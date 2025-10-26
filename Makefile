@@ -2,7 +2,9 @@ SHELL := /bin/sh
 .RECIPEPREFIX := >
 
 PKG_NAME := ctoolkit
-PKG_VERSION := $(strip $(shell cat VERSION))
+PROJECT_VERSION ?=
+GIT_TAG := $(strip $(shell git describe --tags --match 'v*' --abbrev=0 2>/dev/null || true))
+PKG_VERSION := $(strip $(if $(PROJECT_VERSION),$(PROJECT_VERSION),$(if $(GIT_TAG),$(patsubst v%,%,$(GIT_TAG)),0.0.0)))
 PKG_RELEASE ?= 1
 WITH_KSMBD ?= 1
 
@@ -26,7 +28,7 @@ all: ipk
 
 ipk: $(IPK_PATH)
 
-$(IPK_PATH): scripts/openwrt_full_backup scripts/openwrt_full_restore scripts/user_installed_packages VERSION
+$(IPK_PATH): scripts/openwrt_full_backup scripts/openwrt_full_restore scripts/user_installed_packages
 > rm -rf $(WORK_DIR)
 > mkdir -p $(DATA_DIR)/usr/bin
 > mkdir -p $(DATA_DIR)/usr/share/$(SHARE_DIR)
@@ -34,7 +36,7 @@ $(IPK_PATH): scripts/openwrt_full_backup scripts/openwrt_full_restore scripts/us
 > install -m 0755 scripts/openwrt_full_backup $(DATA_DIR)/usr/bin/openwrt_full_backup
 > install -m 0755 scripts/openwrt_full_restore $(DATA_DIR)/usr/bin/openwrt_full_restore
 > install -m 0755 scripts/user_installed_packages $(DATA_DIR)/usr/bin/user_installed_packages
-> install -m 0644 VERSION $(DATA_DIR)/usr/share/$(SHARE_DIR)/VERSION
+> printf '%s\n' "$(PKG_VERSION)" > $(DATA_DIR)/usr/share/$(SHARE_DIR)/VERSION
 > install -m 0644 README.md $(DATA_DIR)/usr/share/doc/$(PKG_NAME)/README.md
 > install -m 0644 LICENSE $(DATA_DIR)/usr/share/doc/$(PKG_NAME)/LICENSE
 > mkdir -p $(CONTROL_DIR)
