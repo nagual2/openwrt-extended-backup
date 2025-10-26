@@ -4,6 +4,17 @@
 # Provides a standard mocked environment with command stubs,
 # temporary workspace management, and convenience assertions.
 
+if ! command -v fail >/dev/null 2>&1; then
+  fail() {
+    if [ "$#" -eq 0 ]; then
+      printf 'test failed\n' >&2
+    else
+      printf '%s\n' "$*" >&2
+    fi
+    return 1
+  }
+fi
+
 mock_setup() {
   if [[ -n "${MOCK_ENV_INITIALIZED-}" ]]; then
     return
