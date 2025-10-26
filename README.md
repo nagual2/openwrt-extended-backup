@@ -17,8 +17,10 @@
 - `openwrt_full_backup`
   - Архивирует весь пользовательский слой (`/overlay`) с сохранением прав и владельцев.
   - По умолчанию выводит команду `scp` для скачивания архива и поддерживает `--emit-scp-cmd` для интеграции в автоматизацию.
-  - Может автоматически загрузить архив на удалённый хост с помощью `--upload scp://...` или `--upload sftp://...` и опциональных флагов `--identity`, `--known-hosts`, `--port`, `--retry`, `--upload-only`, `--dry-run`.
-  - Управляется через флаг `--export` (`scp`, `local`, `smb`), а также предоставляет флаги `--ssh-host`, `--ssh-port`, `--ssh-user`, `--out-dir`, `--emit-scp-cmd`, `-q` и `-v` для настройки поведения.
+  - Управляется через флаг `--export` (`scp`, `local`, `smb`), а также предоставляет
+    флаги `--ssh-host`, `--ssh-port`, `--ssh-user`, `--out-dir`, `--output`,
+    `--emit-scp-cmd`, `-n`/`--dry-run`, `-q` и `-v` для настройки поведения. Режим
+    dry-run также можно включить через переменную окружения `DRY_RUN=1`.
   - При `--export=smb` настраивает временную SMB-шару (при наличии `ksmbd`) без автоматической установки пакетов.
 - `openwrt_full_restore`
   - Валидирует архив (`tar -tzf`) и умеет работать в режиме dry-run без изменений на роутере.
@@ -113,7 +115,7 @@ make install          # установит пакет через opkg, если 
 ## Опции CLI
 | Скрипт | Опции | Поведение |
 | --- | --- | --- |
-| `openwrt_full_backup` | `-h`, `--help`, `-V`, `--version`, `--export`, `--out-dir`, `--ssh-host`, `--ssh-port`, `--ssh-user`, `--emit-scp-cmd`, `--upload`, `--identity`, `--known-hosts`, `--port`, `--retry`, `--upload-only`, `--dry-run`, `-v`, `-q` | Создаёт архив `/overlay`, по умолчанию сохраняет его в `/tmp` и выводит команду `scp`. Может автоматически загрузить архив на внешний хост по `scp`/`sftp` и при `--export=smb` настраивает временную SMB-шару (при наличии `ksmbd`). |
+| `openwrt_full_backup` | `-h`, `--help`, `-V`, `--version`, `--export`, `--out-dir`, `--output`, `--ssh-host`, `--ssh-port`, `--ssh-user`, `--emit-scp-cmd`, `-n`, `--dry-run`, `-v`, `-q` | Создаёт архив `/overlay`, по умолчанию сохраняет его в `/tmp` и выводит команду `scp`. При `--export=smb` настраивает временную SMB-шару (при наличии `ksmbd`). Режим dry-run доступен также через переменную `DRY_RUN=1`. |
 | `openwrt_full_restore` | `-h`, `--help` | Выводит краткую справку по доступным опциям. |
 | `openwrt_full_restore` | `-V`, `--version` | Показывает версию и завершает выполнение. |
 | `openwrt_full_restore` | `-a`, `--archive PATH` | Использует указанный архив; без параметра запросит путь интерактивно. |
@@ -151,25 +153,6 @@ scp -i ~/.ssh/openwrt_ed25519 \
 openwrt_full_backup --emit-scp-cmd --ssh-host 192.168.1.1 --ssh-user root --ssh-port 2222 > /tmp/scp-command.txt
 sh /tmp/scp-command.txt
 ```
-
-### Удалённая загрузка архива
-```sh
-openwrt_full_backup \
-    --upload scp://backup@example.com:/srv/backups/router-full.tar.gz \
-    --identity /etc/dropbear/dropbear_ed25519_host_key \
-    --known-hosts /etc/ssh/known_hosts \
-    --retry 3 \
-    --upload-only
-```
-Скрипт выполнит загрузку архива на `backup@example.com` (по умолчанию порт 22), повторит попытку до трёх раз и по завершении удалит локальную копию (`--upload-only`). Для `sftp` используйте URL вида `sftp://user@host:/path` и при необходимости укажите альтернативный порт:
-```sh
-openwrt_full_backup --upload sftp://backup@example.com:/srv/backups/router.tar.gz --port 2222 --out-dir /tmp
-```
-Опция `--dry-run` позволяет проверить итоговую команду без создания архива и без отправки данных:
-```sh
-openwrt_full_backup --dry-run --upload scp://backup@example.com:/srv/backups/test.tar.gz
-```
-Убедитесь, что приватный ключ (`--identity`) и файл `known_hosts` доступны для чтения и содержат корректные записи: скрипт работает в неинтерактивном режиме и не запрашивает подтверждений.
 
 ### SMB / ksmbd
 ```sh
@@ -222,7 +205,6 @@ opkg install luci-i18n-firewall-ru
 
 ## Меры безопасности
 - Используйте SMB-шару только в доверенной сети. После копирования архива остановите `ksmbd` и удалите созданного пользователя: `ksmbd.deluser owrt_backup`.
-- При использовании `--upload` позаботьтесь о корректном `known_hosts` и приватных ключах: скрипт работает в неинтерактивном режиме и завершает работу при ошибке проверки хост-ключа.
 - Смените пароль для SMB-шары вручную, если планируете использовать её повторно.
 - Не храните архив на самом роутере дольше, чем необходимо.
 - Поскольку архив содержит все настройки и пароли, держите его в зашифрованном или защищённом хранилище.
