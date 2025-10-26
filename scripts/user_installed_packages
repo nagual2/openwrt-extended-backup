@@ -27,7 +27,7 @@ fi
 PROJECT_ROOT=$(dirname "$SCRIPT_DIR")
 VERSION_FILE="${PROJECT_ROOT}/VERSION"
 SHARE_VERSION_FILE='/usr/share/openwrt-extended-backup/VERSION'
-VERSION_FALLBACK='0.1.0'
+VERSION_FALLBACK='0.2.0'
 VERSION=''
 
 if [ -r "$VERSION_FILE" ]; then
@@ -210,7 +210,7 @@ DISTRI_TIME=$(awk '
             print min
         }
     }
-' "$STATUS_FILE") || fatal 'Не удалось разобрать status-файл opkg' "$EX_SOFTWARE"
+' "$STATUS_FILE")
 
 if [ -z "$DISTRI_TIME" ]; then
     DISTRI_TIME=0
@@ -268,7 +268,7 @@ STATUS_PACKAGES=$(awk -v include_auto="$INCLUDE_AUTO_DEPS" -v min_time="$DISTRI_
         }
         print pkg
     }
-' "$STATUS_FILE" | sort -u) || fatal 'Не удалось сформировать список пакетов из status-файла' "$EX_SOFTWARE"
+' "$STATUS_FILE" | sort -u)
 
 USER_PACKAGES=''
 if [ -n "$USER_INSTALLED_FILE" ]; then
@@ -282,7 +282,7 @@ if [ -n "$USER_INSTALLED_FILE" ]; then
                 print $0
             }
         }
-    ' "$USER_INSTALLED_FILE" | sort -u) || fatal 'Не удалось обработать пользовательский список пакетов' "$EX_SOFTWARE"
+    ' "$USER_INSTALLED_FILE" | sort -u)
 fi
 
 COMBINED_PACKAGES=$({
@@ -292,7 +292,7 @@ COMBINED_PACKAGES=$({
     if [ -n "$USER_PACKAGES" ]; then
         printf '%s\n' "$USER_PACKAGES"
     fi
-} | awk 'NF' | sort -u) || fatal 'Не удалось объединить списки пакетов' "$EX_SOFTWARE"
+} | awk 'NF' | sort -u)
 
 MAIN_LINES=''
 MAIN_ARGS=''

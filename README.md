@@ -1,23 +1,10 @@
 # openwrt_full_backup & openwrt_full_restore
 
-<<<<<<< HEAD
 [![Shell quality checks](https://github.com/nagual2/openwrt-extended-backup/actions/workflows/shell-quality.yml/badge.svg?branch=main)](https://github.com/nagual2/openwrt-extended-backup/actions/workflows/shell-quality.yml)
-=======
-[![CI](https://github.com/nagual2/openwrt-extended-backup/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/nagual2/openwrt-extended-backup/actions/workflows/ci.yml)
->>>>>>> origin/merge-tasks-1-15-into-main-e01
 
-Набор shell-утилит, выполняющихся напрямую на маршрутизаторе под управлением OpenWrt. Основной сценарий `openwrt_full_backup` создаёт полную резервную копию пользовательского слоя (`/overlay`), сохраняет архив в выбранный каталог (по умолчанию `/tmp`) и выводит готовую команду `scp` для копирования. При необходимости скрипт умеет поднять временную SMB-шару через `ksmbd`. Комплементарная утилита `openwrt_restore` валидирует архив, при наличии проверяет контрольную сумму, создаёт резервный снимок текущего `/overlay`, безопасно применяет резервную копию, поддерживает dry-run, переустановку пакетов и опциональный reboot. Наследуемый сценарий `openwrt_full_restore` остаётся для совместимости. Вспомогательный скрипт `user_installed_packages` выводит список вручную установленных пакетов для последующей переустановки.
+Набор shell-утилит, выполняющихся напрямую на маршрутизаторе под управлением OpenWrt. Основной сценарий `openwrt_full_backup` создаёт полную резервную копию пользовательского слоя (`/overlay`), сохраняет архив в выбранный каталог (по умолчанию `/tmp`) и выводит готовую команду `scp` для копирования. При необходимости скрипт умеет поднять временную SMB-шару через `ksmbd`. Комплементарная утилита `openwrt_full_restore` валидирует архив, безопасно восстанавливает файлы с предварительным резервным копированием текущего состояния, поддерживает dry-run и переустановку пакетов. Вспомогательный скрипт `user_installed_packages` выводит список вручную установленных пакетов для последующей переустановки.
 
 Для политики ветвления и требований к PR см. [CONTRIBUTING.md](./CONTRIBUTING.md).
-
-## Минимальный процесс контрибуции
-
-1. Создайте ветку от `main` с осмысленным именем (см. рекомендации в `CONTRIBUTING.md`).
-2. Выполните локальные проверки качества: `./scripts/ci/check-shell-quality.sh`.
-3. Откройте Pull Request в `main` и убедитесь, что CI зелёный:
-   - **Shell quality checks / Shell quality**;
-   - **Post-release verify / Verify release metadata**.
-4. Дождитесь аппрува мейнтейнеров (для изменений в `scripts/` и `.github/workflows/` они назначаются через `CODEOWNERS`) и нажмите Merge только после успешных проверок. Форс-пуш в `main` запрещён.
 
 > ⚠️ Архив сохраняется в оперативной памяти (по умолчанию в `/tmp`). После перезагрузки маршрутизатора файл исчезает — скачайте и сохраните его сразу после создания.
 
@@ -29,17 +16,15 @@
 ## Основные возможности
 - `openwrt_full_backup`
   - Архивирует весь пользовательский слой (`/overlay`) с сохранением прав и владельцев.
-  - По умолчанию выводит команду `scp` для скачивания архива и поддерживает `--emit-scp-cmd` для интеграции в автоматизацию.
-  - Управляется через флаг `--export` (`scp`, `local`, `smb`), а также предоставляет флаги `--ssh-host`, `--ssh-port`, `--ssh-user`, `--out-dir`, `--emit-scp-cmd`, `-q` и `-v` для настройки поведения.
+  - По умолчанию выполняет удалённую выгрузку через SCP: после создания архива печатает готовую команду `scp`, поддерживает `--emit-scp-cmd` для автоматизации и опции `--ssh-host`, `--ssh-port`, `--ssh-user` для корректного доступа к роутеру из внешней сети.
+  - Режим экспорта настраивается через `--export` (`scp`, `local`, `smb`), можно указать каталог назначения `--out-dir` и управлять уровнем логирования (`-q`, `-v`).
   - При `--export=smb` настраивает временную SMB-шару (при наличии `ksmbd`) без автоматической установки пакетов.
-- `openwrt_restore`
-  - Проверяет архив (`tar -tzf`) и при наличии файла `*.sha256`/`*.sha256sum` сверяет контрольную сумму.
-  - Перед применением создаёт архив-снимок текущего `/overlay` в `TMPDIR`, умеет работать в режиме dry-run без изменений.
-  - Приостанавливает вспомогательные службы, аккуратно распаковывает резервную копию в указанный overlay (поддерживает `--overlay` для тестов) и выполняет `sync`.
-  - Переустанавливает пакеты из переданного скрипта или генерирует команды через `user_installed_packages`, при необходимости пропускает шаг.
-  - По завершении может инициировать перезагрузку (отключается `--no-reboot`).
 - `openwrt_full_restore`
-  - Сохранён для обратной совместимости: формирует подробный отчёт, создаёт резервные копии перезаписываемых файлов и предлагает перезапуск служб.
+  - Валидирует архив (`tar -tzf`) и умеет работать в режиме dry-run без изменений на роутере.
+  - Перед распаковкой создаёт резервные копии перезаписываемых файлов в `/tmp/openwrt-restore-backup-*`.
+  - Распаковывает с сохранением атрибутов, восстанавливает права и владельцев, отслеживает новые и изменённые файлы.
+  - Предлагает запустить сохранённый список пакетов и перезапускает ключевые службы (network, wifi, firewall, dnsmasq, dropbear, sqm) при необходимости.
+  - Формирует итоговый отчёт со списком действий и путём до резервных копий.
 - `user_installed_packages`
   - Генерирует детерминированный список и команды для переустановки вручную установленных `opkg`-пакетов с опциями фильтрации.
 
@@ -53,19 +38,17 @@
 ## Установка
 
 ### Через пакет .ipk
-1. Соберите пакет самостоятельно (см. раздел «Сборка пакета (.ipk)») или скачайте готовый файл `ctoolkit_*.ipk`.
+1. Соберите пакет самостоятельно (см. раздел «Сборка пакета (.ipk)») или скачайте готовый артефакт `openwrt-extended-backup_*.ipk` из релиза GitHub.
 2. Передайте его на роутер, например:
    ```sh
-   scp dist/ctoolkit_*.ipk root@<ip_роутера>:/tmp/
+   scp dist/openwrt-extended-backup_*.ipk root@<ip_роутера>:/tmp/
    ```
 3. Установите пакет:
    ```sh
-   opkg install /tmp/ctoolkit_*.ipk
+   opkg install /tmp/openwrt-extended-backup_*.ipk
    ```
 
-Готовые сборки автоматически публикуются в разделе [GitHub Releases](https://github.com/nagual2/openwrt-extended-backup/releases) вместе с feed-индексом (`Packages.gz`) и файлами контрольных сумм.
-
-Скрипты устанавливаются в `/usr/bin/` и становятся доступны по именам `openwrt_full_backup`, `openwrt_full_restore` и `user_installed_packages`. По умолчанию вместе с пакетом будет установлена зависимость `ksmbd-tools`; чтобы исключить её, соберите пакет с параметром `WITH_KSMBD=0`.
+Скрипты устанавливаются в `/usr/sbin/` и становятся доступны по именам `openwrt_full_backup`, `openwrt_full_restore` и `user_installed_packages`. По умолчанию вместе с пакетом будет установлена зависимость `ksmbd-tools`; чтобы исключить её, соберите пакет с параметром `WITH_KSMBD=0`.
 
 ### Ручная установка скриптов
 ```sh
@@ -73,13 +56,9 @@
 wget https://raw.githubusercontent.com/nagual2/openwrt-extended-backup/main/scripts/openwrt_full_backup -O /backup
 chmod +x /backup
 
-# Современный скрипт восстановления
-wget https://raw.githubusercontent.com/nagual2/openwrt-extended-backup/main/scripts/openwrt_restore -O /restore
+# Скрипт восстановления (необязательно, но рекомендуется)
+wget https://raw.githubusercontent.com/nagual2/openwrt-extended-backup/main/scripts/openwrt_full_restore -O /restore
 chmod +x /restore
-
-# Легаси-вариант (по желанию)
-wget https://raw.githubusercontent.com/nagual2/openwrt-extended-backup/main/scripts/openwrt_full_restore -O /restore_legacy
-chmod +x /restore_legacy
 
 # Вспомогательный список пользовательских пакетов
 wget https://raw.githubusercontent.com/nagual2/openwrt-extended-backup/main/scripts/user_installed_packages -O /usr/bin/user_installed_packages
@@ -91,17 +70,17 @@ chmod +x /usr/bin/user_installed_packages
 ## Сборка пакета (.ipk)
 
 ### Через OpenWrt buildroot/SDK
-1. Подключите репозиторий как feed (например, добавьте строку `src-git ctoolkit https://github.com/nagual2/openwrt-extended-backup.git` в `feeds.conf`) или скопируйте каталог `package/ctoolkit/` из этого репозитория в `package/ctoolkit` внутри сборочной среды.
+1. Подключите репозиторий как feed (например, добавьте строку `src-git extended_backup https://github.com/nagual2/openwrt-extended-backup.git` в `feeds.conf`) или скопируйте каталог `openwrt/` из этого репозитория в `package/openwrt-extended-backup` внутри сборочной среды.
 2. Если используете feeds, обновите и установите пакет:
    ```sh
-   ./scripts/feeds update ctoolkit
-   ./scripts/feeds install ctoolkit
+   ./scripts/feeds update extended_backup
+   ./scripts/feeds install openwrt-extended-backup
    ```
    При ручном копировании каталога этот шаг можно пропустить.
-3. При необходимости отключите зависимость `ksmbd-tools` через `make menuconfig` (Utilities → ctoolkit).
+3. При необходимости отключите зависимость `ksmbd-tools` через `make menuconfig` (Utilities → openwrt-extended-backup).
 4. Соберите пакет:
    ```sh
-   make package/ctoolkit/compile V=sc
+   make package/openwrt-extended-backup/compile V=sc
    ```
 
 Готовый `ipk` окажется в каталоге `bin/packages/<архитектура>/packages/`.
@@ -111,7 +90,7 @@ chmod +x /usr/bin/user_installed_packages
 В корне проекта доступен упрощённый `Makefile`:
 
 ```sh
-make ipk              # соберёт dist/ctoolkit_<версия>-1_all.ipk
+make ipk              # соберёт dist/openwrt-extended-backup_<версия>-1_all.ipk
 make ipk WITH_KSMBD=0 # исключить зависимость на ksmbd-tools
 make install          # установит пакет через opkg, если утилита доступна на хосте
 ```
@@ -128,41 +107,47 @@ make install          # установит пакет через opkg, если 
 4. После скачивания удалите архив на роутере, чтобы освободить оперативную память: `rm -f /tmp/fullbackup_*`.
 5. (Опционально) Для сетевого доступа по SMB запустите `openwrt_full_backup --export=smb` на устройстве с установленным `ksmbd`.
 6. (Опционально) Выполните `user_installed_packages` для генерации списка вручную установленных пакетов.
-7. Для восстановления воспользуйтесь `openwrt_restore --archive /tmp/fullbackup_*.tar.gz` (есть режим dry-run, проверка sha256, переустановка пакетов и опциональный reboot). При необходимости доступен совместимый `openwrt_full_restore`.
+7. Для восстановления воспользуйтесь `openwrt_full_restore --archive /tmp/fullbackup_*.tar.gz` (доступен режим dry-run и автоматическая переустановка пакетов).
 
 ## Опции CLI
 | Скрипт | Опции | Поведение |
 | --- | --- | --- |
 | `openwrt_full_backup` | `-h`, `--help`, `-V`, `--version`, `--export`, `--out-dir`, `--ssh-host`, `--ssh-port`, `--ssh-user`, `--emit-scp-cmd`, `-v`, `-q` | Создаёт архив `/overlay`, по умолчанию сохраняет его в `/tmp` и выводит команду `scp`. При `--export=smb` настраивает временную SMB-шару (при наличии `ksmbd`). |
-| `openwrt_restore` | `--archive`, `--packages`, `--dry-run`, `--overlay`, `--no-reboot`, `--force`, `-h`, `--help`, `-V`, `--version` | Проверяет архив (включая sha256 при наличии), делает снимок текущего `overlay`, безопасно применяет резервную копию, переустанавливает пакеты и позволяет отключить автоматическую перезагрузку. |
-| `openwrt_full_restore` | `-h`, `--help`, `-V`, `--version`, `-a`, `--archive`, `-d`, `--dry-run`, `-p`, `--packages`, `--no-packages`, `-y`, `--yes` | Легаси-скрипт с интерактивным отчётом, резервированием перезаписываемых файлов и подсказками по перезапуску служб. |
-| `user_installed_packages` | `-h`, `--help`, `-V`, `--version`, `--status-file`, `--user-installed-file`, `-x`, `--exclude`, `--include-auto-deps` | Анализирует текущую систему и выводит отсортированные команды `opkg`. |
+| `openwrt_full_restore` | `-h`, `--help` | Выводит краткую справку по доступным опциям. |
+| `openwrt_full_restore` | `-V`, `--version` | Показывает версию и завершает выполнение. |
+| `openwrt_full_restore` | `-a`, `--archive PATH` | Использует указанный архив; без параметра запросит путь интерактивно. |
+| `openwrt_full_restore` | `-d`, `--dry-run` | Выполняет проверку архива и формирует отчёт без изменений в системе. |
+| `openwrt_full_restore` | `-p`, `--packages PATH` | После распаковки запускает скрипт переустановки пакетов по указанному пути. |
+| `openwrt_full_restore` | `--no-packages` | Пропускает шаг с переустановкой пакетов и не задаёт вопрос. |
+| `openwrt_full_restore` | `-y`, `--yes` | Автоматически подтверждает действия (без дополнительных вопросов). |
+| `user_installed_packages` | `-h`, `--help` | Выводит краткую справку и перечисление доступных опций. |
+| `user_installed_packages` | `-V`, `--version` | Выводит текущую версию утилиты и завершает выполнение. |
+| `user_installed_packages` | `--status-file PATH` | Использует альтернативный `opkg` статус-файл (например, для тестов). |
+| `user_installed_packages` | `--user-installed-file PATH` | Добавляет пакеты из произвольного списка (по одному имени на строку). |
+| `user_installed_packages` | `-x`, `--exclude PATTERN` | Исключает пакеты по шаблону (аргумент можно повторять). |
+| `user_installed_packages` | `--include-auto-deps` | Включает зависимости, помеченные `Auto-Installed: yes`. |
+| `user_installed_packages` | без аргументов | Анализирует текущую систему и выводит отсортированные команды `opkg update` и `opkg install …`. |
 
-<<<<<<< HEAD
 ## Версионирование и релизы
 - Текущая версия хранится в файле `VERSION` в корне репозитория.
 - Оба скрипта поддерживают флаги `-V`/`--version` для быстрого вывода версии без запуска основной логики.
 - Workflow [`Release`](.github/workflows/release.yml) использует [release-please](https://github.com/googleapis/release-please) для формирования GitHub Releases, обновления `CHANGELOG.md` и автоматической публикации архивов со скриптами.
-=======
-Run the backup script as root on the router. By default, it stores the archive in `/tmp`, prints the full path, and shows an `scp` command that you can run from your workstation.
->>>>>>> origin/merge-tasks-1-15-into-main-e01
 
 ## Примеры
-### SCP по умолчанию
+### SCP и удалённая выгрузка
 ```sh
-openwrt_full_backup
+openwrt_full_backup --ssh-host 192.168.1.1 --ssh-port 2222 --ssh-user root
 # Скрипт напечатает команду вида:
-# scp root@OpenWrt:/tmp/fullbackup_OpenWrt_24.10.4_2024-10-20_12-30-00.tar.gz <destination>
-# На локальной машине выполните команду, при необходимости добавив ключ и параметры проверки:
-scp -i ~/.ssh/openwrt_ed25519 \
-    -o StrictHostKeyChecking=accept-new \
-    root@OpenWrt:/tmp/fullbackup_OpenWrt_24.10.4_2024-10-20_12-30-00.tar.gz \
+# scp -P 2222 root@192.168.1.1:/tmp/fullbackup_OpenWrt_24.10.4_2024-10-20_12-30-00.tar.gz <destination>
+# На локальной машине выполните команду, заменив <destination> на каталог для сохранения архива:
+scp -P 2222 \
+    root@192.168.1.1:/tmp/fullbackup_OpenWrt_24.10.4_2024-10-20_12-30-00.tar.gz \
     ~/Backups/
 ```
-Для автоматизации можно использовать `--emit-scp-cmd`, чтобы вывести только команду без дополнительных сообщений:
+Используйте `--emit-scp-cmd`, чтобы получить только подготовленную команду (например, для копирования в буфер обмена или добавления в автоматизацию):
 ```sh
-openwrt_full_backup --emit-scp-cmd --ssh-host 192.168.1.1 --ssh-user root --ssh-port 2222 > /tmp/scp-command.txt
-sh /tmp/scp-command.txt
+openwrt_full_backup --emit-scp-cmd --ssh-host router.lan --ssh-port 2222 > /tmp/scp-command.txt
+# Откройте файл, замените <destination> на нужный путь и выполните команду на своей машине.
 ```
 
 ### SMB / ksmbd
@@ -180,12 +165,12 @@ rm -f /tmp/archive/fullbackup_*
 ### Восстановление и dry-run
 ```sh
 # Проверяем архив без внесения изменений
-openwrt_restore --dry-run --archive /tmp/fullbackup_OpenWrt_24.10.4_2024-10-20_12-30-00.tar.gz --no-reboot
+openwrt_full_restore --dry-run --archive /tmp/fullbackup_OpenWrt_24.10.4_2024-10-20_12-30-00.tar.gz
 
-# Применяем восстановление с переустановкой пакетов без автоперезагрузки
-openwrt_restore --archive /tmp/fullbackup_OpenWrt_24.10.4_2024-10-20_12-30-00.tar.gz --packages /tmp/opkg-user-packages.sh --no-reboot
+# Применяем восстановление с автоматическим подтверждением и переустановкой пакетов
+openwrt_full_restore --yes --archive /tmp/fullbackup_OpenWrt_24.10.4_2024-10-20_12-30-00.tar.gz --packages /tmp/opkg-user-packages.sh
 ```
-После применения изучите журнал: утилита сообщит путь к снимку текущего `/overlay`, статус скрипта пакетов и напомнит вручную перезагрузить устройство при необходимости.
+После применения проверьте отчёт: он покажет путь к резервным копиям перезаписанных файлов (`/tmp/openwrt-restore-backup-*`) и список служб, которые были перезапущены.
 
 ### Список пользовательских пакетов
 ```sh
@@ -203,19 +188,23 @@ luci-app-sqm
 luci-theme-material
 smartmontools
 tailscale
-<<<<<<< HEAD
 
-=======
-htop
->>>>>>> origin/merge-tasks-1-15-into-main-e01
 # LuCI translations (1)
 luci-i18n-firewall-ru
+
 opkg update
 opkg install bash htop luci-app-sqm luci-theme-material smartmontools tailscale
 opkg install luci-i18n-firewall-ru
 ```
 
 Можно, например, скрыть локализации (`user_installed_packages --exclude 'luci-i18n-*'`) или вернуть зависимости, помеченные `Auto-Installed: yes` (`user_installed_packages --include-auto-deps`).
+
+## Тестирование
+Фикстуры в `tests/fixtures/` и скрипт `tests/user_installed_packages_test.sh` проверяют сценарии генерации списка пакетов end-to-end. Тесты запускаются в CI и помогают избежать регрессий.
+
+```sh
+./tests/user_installed_packages_test.sh
+```
 
 ## Меры безопасности
 - Используйте SMB-шару только в доверенной сети. После копирования архива остановите `ksmbd` и удалите созданного пользователя: `ksmbd.deluser owrt_backup`.
@@ -245,21 +234,4 @@ opkg install luci-i18n-firewall-ru
 
 ---
 
-<<<<<<< HEAD
 Скрипты распространяются «как есть». Будем рады обратной связи и улучшениям через Pull Request.
-=======
-The CI workflow defined in `ci.yml` runs the same formatting and test checks.
-
-## Releases
-
-- The current version is stored in the root `VERSION` file.
-- Both scripts expose `-V`/`--version` to print the version without executing the main logic.
-- The workflow [`.github/workflows/release.yml`](.github/workflows/release.yml) runs on tags matching `v*`, builds `openwrt-extended-backup-${VERSION}.tar.gz` and `.zip`, generates `SHA256SUMS`, and publishes a GitHub Release using the matching section from `CHANGELOG.md`.
-- To publish a new release manually (example for `v0.1.0`):
-  1. Update `VERSION`: `printf '0.1.0\n' > VERSION`.
-  2. Add or update the `## [v0.1.0]` section in `CHANGELOG.md` with the release notes.
-  3. Commit the changes: `git commit -am "chore: prepare release 0.1.0"`.
-  4. Create an annotated tag: `git tag -a v0.1.0 -m "v0.1.0"`.
-  5. Push the branch and tag: `git push origin main && git push origin v0.1.0`.
-  6. Wait for GitHub Actions to publish the release with packaged archives and `SHA256SUMS`.
->>>>>>> origin/merge-tasks-1-15-into-main-e01

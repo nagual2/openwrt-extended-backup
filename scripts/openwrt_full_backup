@@ -27,7 +27,7 @@ fi
 PROJECT_ROOT=$(dirname "$SCRIPT_DIR")
 VERSION_FILE="${PROJECT_ROOT}/VERSION"
 SHARE_VERSION_FILE='/usr/share/openwrt-extended-backup/VERSION'
-VERSION_FALLBACK='0.1.0'
+VERSION_FALLBACK='0.2.0'
 
 if [ -r "$VERSION_FILE" ]; then
     VERSION=$(head -n 1 "$VERSION_FILE")
@@ -141,15 +141,7 @@ to_absolute_path() {
 
 find_share_index_by_name() {
     name=$1
-    uci_output=$(uci -q show ksmbd 2>/dev/null || printf '')
-    if [ -z "$uci_output" ]; then
-        return 1
-    fi
-
-    if ! share_indexes=$(printf '%s\n' "$uci_output" | sed -n 's/^ksmbd\.@share\[\([0-9]\+\)\]=share$/\1/p'); then
-        return 1
-    fi
-
+    share_indexes=$(uci -q show ksmbd | sed -n 's/^ksmbd\.@share\[\([0-9]\+\)\]=share$/\1/p')
     for idx in $share_indexes; do
         current=$(uci -q get "ksmbd.@share[$idx].name" 2>/dev/null || printf '')
         if [ "$current" = "$name" ]; then
@@ -294,13 +286,9 @@ sanitize_token() {
 
 get_firmware_tag() {
     if [ -r /etc/openwrt_release ]; then
-        if ! desc=$(grep "^DISTRIB_DESCRIPTION='" /etc/openwrt_release 2>/dev/null | head -n 1); then
-            desc=''
-        fi
+        desc=$(grep "^DISTRIB_DESCRIPTION='" /etc/openwrt_release 2>/dev/null | head -n 1)
         if [ -n "$desc" ]; then
-            if ! value=$(printf '%s\n' "$desc" | cut -d"'" -f2); then
-                value=''
-            fi
+            value=$(printf '%s' "$desc" | cut -d"'" -f2)
             if [ -n "$value" ]; then
                 sanitize_token "$value"
                 return 0
@@ -364,13 +352,9 @@ create_archive() {
     log_info "Архив сохранён: $ARCHIVE_PATH"
 
     if command -v du >/dev/null 2>&1; then
-        if du_output=$(du -h "$ARCHIVE_PATH" 2>/dev/null); then
-            if ! size=$(printf '%s\n' "$du_output" | awk 'NR==1 {print $1; exit}'); then
-                size=''
-            fi
-            if [ -n "$size" ]; then
-                log_info "Размер архива: $size"
-            fi
+        size=$(du -h "$ARCHIVE_PATH" 2>/dev/null | awk '{print $1}' | head -n 1)
+        if [ -n "$size" ]; then
+            log_info "Размер архива: $size"
         fi
     fi
 }
@@ -389,9 +373,7 @@ ensure_ksmbd_dependencies() {
 
 generate_password() {
     if command -v tr >/dev/null 2>&1; then
-        if ! candidate=$(tr -dc 'A-Za-z0-9' </dev/urandom 2>/dev/null | head -c 16); then
-            candidate=''
-        fi
+        candidate=$(tr -dc 'A-Za-z0-9' </dev/urandom 2>/dev/null | head -c 16)
         if [ -n "$candidate" ]; then
             printf '%s\n' "$candidate"
             return 0
@@ -471,18 +453,14 @@ get_primary_ip() {
     fi
 
     if ip -4 addr show br-lan >/dev/null 2>&1; then
-        if ! candidate=$(ip -4 addr show br-lan 2>/dev/null | awk '/inet / {print $2}' | cut -d/ -f1 | head -n 1); then
-            candidate=''
-        fi
+        candidate=$(ip -4 addr show br-lan | awk '/inet / {print $2}' | cut -d/ -f1 | head -n 1)
         if [ -n "$candidate" ]; then
             printf '%s\n' "$candidate"
             return 0
         fi
     fi
 
-    if ! candidate=$(ip -4 addr show 2>/dev/null | awk '/inet / && $2 !~ /^127\./ {print $2}' | cut -d/ -f1 | head -n 1); then
-        candidate=''
-    fi
+    candidate=$(ip -4 addr show | awk '/inet / && $2 !~ /^127\./ {print $2}' | cut -d/ -f1 | head -n 1)
     if [ -n "$candidate" ]; then
         printf '%s\n' "$candidate"
         return 0
