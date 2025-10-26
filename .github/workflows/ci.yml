@@ -1,4 +1,4 @@
-name: Shell quality
+name: shell quality
 
 on:
   push:
@@ -15,24 +15,35 @@ jobs:
   shell-quality:
     name: shell quality
     runs-on: ubuntu-latest
+    env:
+      CI_DEBUG_DIR: ci-debug
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Prepare debug artifacts directory
+        run: mkdir -p "${CI_DEBUG_DIR}"
+
       - name: Install dependencies
         run: |
-          sudo apt-get update
-          sudo apt-get install --no-install-recommends -y bats shellcheck curl ca-certificates busybox
+          set -euo pipefail
+          {
+            sudo apt-get update
+            sudo apt-get install --no-install-recommends -y bats shellcheck curl ca-certificates busybox
+          } 2>&1 | tee "${CI_DEBUG_DIR}/install-dependencies.log"
 
       - name: Install shfmt
         env:
           SHFMT_VERSION: "3.9.2"
         run: |
           set -euo pipefail
-          curl -sSfL "https://github.com/mvdan/sh/releases/download/v${SHFMT_VERSION}/shfmt_v${SHFMT_VERSION}_linux_amd64" -o shfmt
-          sudo install -m 0755 shfmt /usr/local/bin/shfmt
+          {
+            curl -sSfL "https://github.com/mvdan/sh/releases/download/v${SHFMT_VERSION}/shfmt_v${SHFMT_VERSION}_linux_amd64" -o shfmt
+            sudo install -m 0755 shfmt /usr/local/bin/shfmt
+          } 2>&1 | tee "${CI_DEBUG_DIR}/install-shfmt.log"
 
-      - name: Collect shell scripts
+      - name: Discover shell scripts
+        shell: bash
         run: |
           set -euo pipefail
           shell_files="shell-files.txt"
@@ -47,52 +58,61 @@ jobs:
           done < <(git ls-files -z)
           if [ ! -s "$shell_files" ]; then
             echo "No shell scripts found to check. Skipping ShellCheck and shfmt steps."
-            exit 0
+          else
+            tmp_sorted="$(mktemp)"
+            LC_ALL=C sort -zu "$shell_files" > "$tmp_sorted"
+            mv "$tmp_sorted" "$shell_files"
+            echo "Shell scripts to check:"
+            tr '\0' '\n' < "$shell_files"
           fi
-          tmp_sorted="$(mktemp)"
-          LC_ALL=C sort -zu "$shell_files" > "$tmp_sorted"
-          mv "$tmp_sorted" "$shell_files"
-          echo "Shell scripts to check:"
-          tr '\0' '\n' < "$shell_files"
+          cp -f "$shell_files" "${CI_DEBUG_DIR}/shell-files.txt"
 
       - name: Run shellcheck
+        shell: bash
         run: |
           set -euo pipefail
           if [ ! -s shell-files.txt ]; then
             echo "No shell scripts found. Skipping ShellCheck."
             exit 0
           fi
+          log="${CI_DEBUG_DIR}/shellcheck.log"
           if [ -f .shellcheckrc ]; then
-            xargs -0 -r shellcheck --config-file ".shellcheckrc" -s sh -- < shell-files.txt
+            xargs -0 -r shellcheck --config-file ".shellcheckrc" -s sh -- < shell-files.txt 2>&1 | tee "$log"
           else
-            echo "Warning: .shellcheckrc not found. Running ShellCheck with default configuration." >&2
-            xargs -0 -r shellcheck -s sh -- < shell-files.txt
+            {
+              echo "Warning: .shellcheckrc not found. Running ShellCheck with default configuration." >&2
+              xargs -0 -r shellcheck -s sh -- < shell-files.txt
+            } 2>&1 | tee "$log"
           fi
 
       - name: Check formatting with shfmt
+        shell: bash
         run: |
           set -euo pipefail
           if [ ! -s shell-files.txt ]; then
             echo "No shell scripts found. Skipping shfmt."
             exit 0
           fi
-          xargs -0 -r shfmt -d -i 2 -bn -ci -sr -- < shell-files.txt
+          xargs -0 -r shfmt -d -i 2 -bn -ci -sr -- < shell-files.txt 2>&1 | tee "${CI_DEBUG_DIR}/shfmt.log"
 
       - name: Run Bats tests
         env:
           BATS_SHELL: /bin/sh
+        shell: bash
         run: |
           set -euo pipefail
           if [ ! -d tests ]; then
             echo "tests/ directory not found. Skipping Bats tests."
             exit 0
           fi
-          bats tests
+          bats tests 2>&1 | tee "${CI_DEBUG_DIR}/bats.log"
 
-  post-release-verify:
-    name: Post-release verify
-    if: github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
-    steps:
-      - name: No-op verification
-        run: echo "Post-release verification is not required for pull requests."
+      - name: Upload debug artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: shell-quality-debug
+          path: |
+            ${{ env.CI_DEBUG_DIR }}
+            shell-files.txt
+          if-no-files-found: ignore
