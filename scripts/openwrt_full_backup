@@ -27,294 +27,335 @@ fi
 
 common_init "$0"
 
+DRY_RUN=0
+OUTPUT_DIR='/tmp'
+OVERLAY_PATH='/overlay'
+SMB_ENABLED=0
 
-
-
-
-
-
-: "${LOG_LEVEL:=1}"
-EXPORT_MODE='scp'
-EMIT_SCP_CMD=0
-SSH_HOST='OpenWrt'
-SSH_PORT='22'
-SSH_USER='root'
-OUT_DIR='/tmp'
 ARCHIVE_FILENAME=''
 ARCHIVE_PATH=''
 REMOVE_ARCHIVE_ON_FAILURE=0
+TAR_EXCLUDE_FILE=''
 
-DRY_RUN_ENABLED=0
-if [ "${DRY_RUN+x}" = x ]; then
-    case "$DRY_RUN" in
-        '' | 0 | [Ff][Aa][Ll][Ss][Ee] | [Nn][Oo] | [Oo][Ff][Ff])
-            DRY_RUN_ENABLED=0
-            ;;
-        *)
-            DRY_RUN_ENABLED=1
-            ;;
-    esac
+SMB_SHARE_NAME='owrt_archive'
+SMB_USER='owrt_backup'
+SMB_PASSWORD=''
+if [ "${KSMBD_PASSWORD+x}" = x ]; then
+    SMB_PASSWORD=$KSMBD_PASSWORD
 fi
-
-UPLOAD_TARGET=''
-UPLOAD_SCHEME=''
-UPLOAD_REMOTE_SPEC=''
-UPLOAD_USER_HOST=''
-UPLOAD_REMOTE_PATH=''
-IDENTITY_FILE=''
-KNOWN_HOSTS_FILE=''
-UPLOAD_RETRY=1
-
-DEFAULT_OVERLAY_DIR='/overlay'
-if [ "${OVERLAY_SOURCE+x}" = x ] && [ -n "$OVERLAY_SOURCE" ]; then
-    case "$OVERLAY_SOURCE" in
-        /)
-            OVERLAY_PATH='/'
-            ;;
-        */)
-            OVERLAY_PATH=${OVERLAY_SOURCE%/}
-            ;;
-        *)
-            OVERLAY_PATH=$OVERLAY_SOURCE
-            ;;
-    esac
-    if [ -z "$OVERLAY_PATH" ]; then
-        OVERLAY_PATH=$DEFAULT_OVERLAY_DIR
-    fi
-else
-    OVERLAY_PATH=$DEFAULT_OVERLAY_DIR
-fi
-
-KSMBD_SHARE_NAME='owrt_archive'
-KSMBD_USER='owrt_backup'
-KSMBD_PASSWORD=''
-KSMBD_SHARE_CREATED=0
-KSMBD_SHARE_EXISTED=0
-
+SMB_SHARE_CREATED=0
+SMB_SHARE_EXISTED=0
+SMB_USER_CREATED=0
 KSMBD_SERVICE=${KSMBD_INIT_SCRIPT:-/etc/init.d/ksmbd}
-
-
-
-
-
-
 
 usage() {
     cat <<EOF
 Использование: $PROGRAM [ОПЦИИ]
 
 Опции:
-      --export=MODE         Режим экспорта: scp (по умолчанию), smb или local
-      --emit-scp-cmd        Вывести готовую команду scp без дополнительного текста
-      --ssh-host HOST       Имя или адрес OpenWrt-хоста (по умолчанию OpenWrt)
-      --ssh-port PORT       Порт SSH (по умолчанию 22)
-      --ssh-user USER       Пользователь SSH (по умолчанию root)
-      --output PATH         Каталог для архива (по умолчанию /tmp)
-      --out-dir PATH        Алиас для --output (устар.)
-      --upload URL          Загрузить архив на удалённый хост (scp:// или sftp://)
-      --identity PATH       Приватный ключ для scp/sftp (например, ~/.ssh/id_ed25519)
-      --known-hosts PATH    Пользовательский файл known_hosts для проверки ключей
-      --retry COUNT         Количество попыток загрузки (по умолчанию 1)
-  -n, --dry-run             План действий без побочных эффектов (архив не создаётся)
-  -q, --quiet               Режим тихого вывода (только ошибки)
-  -v                        Расширенный вывод (можно указать дважды)
-  -h, --help                Показать эту справку и выйти
-  -V, --version             Показать версию и выйти
+      --output PATH       Каталог для архива (по умолчанию /tmp)
+      --overlay DIR       Каталог overlay для архивации (по умолчанию /overlay)
+      --export=smb        Поднять временную SMB-шару (ksmbd)
+      --dry-run           Проверка без создания архива
+  -h, --help              Показать эту справку и выйти
+  -V, --version           Показать версию и выйти
 EOF
 }
 
+resolve_directory() {
+    dir=$1
+    if [ -z "$dir" ]; then
+        die 'Путь не может быть пустым' "$EX_USAGE"
+    fi
 
-to_absolute_path() {
-    case "$1" in
+    case "$dir" in
         /*)
-            printf '%s\n' "$1"
+            abs=$dir
             ;;
         *)
-            printf '%s/%s\n' "$(pwd)" "$1"
+            abs=$(printf '%s/%s' "$(pwd)" "$dir")
             ;;
     esac
-}
 
-parse_upload_target() {
-    target=$1
-
-    if [ -z "$target" ]; then
-        die 'Опция --upload требует URL (scp:// или sftp://)' "$EX_USAGE"
-    fi
-
-    case "$target" in
-        scp://*)
-            rest=${target#scp://}
-            case "$rest" in
-                *:*)
-                    host_part=${rest%%:*}
-                    path_part=${rest#*:}
-                    ;;
-                *)
-                    die 'URL для SCP должен содержать host:path' "$EX_USAGE"
-                    ;;
-            esac
-            if [ -z "$host_part" ] || [ -z "$path_part" ]; then
-                die 'URL для SCP должен содержать host:path' "$EX_USAGE"
-            fi
-            UPLOAD_TARGET=$target
-            UPLOAD_SCHEME='scp'
-            UPLOAD_USER_HOST=$host_part
-            UPLOAD_REMOTE_PATH=$path_part
-            UPLOAD_REMOTE_SPEC="$UPLOAD_USER_HOST:$UPLOAD_REMOTE_PATH"
+    case "$abs" in
+        /)
+            printf '/\n'
             ;;
-        sftp://*)
-            rest=${target#sftp://}
-            case "$rest" in
-                *:*)
-                    host_part=${rest%%:*}
-                    path_part=${rest#*:}
-                    ;;
-                *)
-                    die 'URL для SFTP должен содержать host:/путь' "$EX_USAGE"
-                    ;;
-            esac
-            if [ -z "$host_part" ] || [ -z "$path_part" ]; then
-                die 'URL для SFTP должен содержать host:/путь' "$EX_USAGE"
-            fi
-            UPLOAD_TARGET=$target
-            UPLOAD_SCHEME='sftp'
-            UPLOAD_USER_HOST=$host_part
-            UPLOAD_REMOTE_PATH=$path_part
-            UPLOAD_REMOTE_SPEC=$UPLOAD_REMOTE_PATH
+        */)
+            printf '%s\n' "${abs%/}"
             ;;
         *)
-            die "Неподдерживаемая схема для --upload: $target" "$EX_USAGE"
+            printf '%s\n' "$abs"
             ;;
     esac
 }
 
-prepare_upload_environment() {
-    if [ -z "$UPLOAD_TARGET" ]; then
-        return 0
-    fi
-
-    case "$UPLOAD_SCHEME" in
-        scp)
-            require_cmd scp
+set_export_mode() {
+    mode=$1
+    case "$mode" in
+        '' | local | none)
+            SMB_ENABLED=0
             ;;
-        sftp)
-            require_cmd sftp
+        smb)
+            SMB_ENABLED=1
+            ;;
+        *)
+            die "Неподдерживаемый режим экспорта: $mode" "$EX_USAGE"
             ;;
     esac
-
-    if [ -n "$IDENTITY_FILE" ] && [ ! -r "$IDENTITY_FILE" ]; then
-        die "Файл приватного ключа недоступен: $IDENTITY_FILE" "$EX_UNAVAILABLE"
-    fi
-
-    if [ -n "$KNOWN_HOSTS_FILE" ] && [ ! -r "$KNOWN_HOSTS_FILE" ]; then
-        die "Файл known_hosts недоступен: $KNOWN_HOSTS_FILE" "$EX_UNAVAILABLE"
-    fi
 }
 
-build_scp_preview() {
-    command_text='scp'
-    if [ "$SSH_PORT" != '22' ]; then
-        command_text="$command_text -P $SSH_PORT"
-    fi
-    if [ -n "$IDENTITY_FILE" ]; then
-        command_text="$command_text -i $IDENTITY_FILE"
-    fi
-    command_text="$command_text -o StrictHostKeyChecking=yes"
-    if [ -n "$KNOWN_HOSTS_FILE" ]; then
-        command_text="$command_text -o UserKnownHostsFile=$KNOWN_HOSTS_FILE"
-    fi
-    command_text="$command_text $ARCHIVE_PATH"
-    if [ -n "$UPLOAD_REMOTE_SPEC" ]; then
-        command_text="$command_text $UPLOAD_REMOTE_SPEC"
-    fi
-    printf '%s\n' "$command_text"
-}
-
-run_with_retries() {
-    max_attempts=$1
-    shift
-    attempt=1
-    status=0
-    while [ "$attempt" -le "$max_attempts" ]; do
-        if "$@"; then
-            return 0
-        fi
-        status=$?
-        if [ "$attempt" -ge "$max_attempts" ]; then
-            return "$status"
-        fi
-        attempt=$((attempt + 1))
-        log_info "Повторная попытка загрузки ($attempt/$max_attempts)"
+parse_args() {
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --output)
+                if [ $# -eq 1 ]; then
+                    die 'Опция --output требует путь' "$EX_USAGE"
+                fi
+                shift
+                OUTPUT_DIR=$1
+                ;;
+            --output=*)
+                OUTPUT_DIR=${1#--output=}
+                ;;
+            --overlay)
+                if [ $# -eq 1 ]; then
+                    die 'Опция --overlay требует путь' "$EX_USAGE"
+                fi
+                shift
+                OVERLAY_PATH=$1
+                ;;
+            --overlay=*)
+                OVERLAY_PATH=${1#--overlay=}
+                ;;
+            --export)
+                if [ $# -eq 1 ]; then
+                    die 'Опция --export требует значение' "$EX_USAGE"
+                fi
+                shift
+                set_export_mode "$1"
+                ;;
+            --export=*)
+                set_export_mode "${1#--export=}"
+                ;;
+            --dry-run)
+                DRY_RUN=1
+                ;;
+            -h | --help)
+                usage
+                exit "$EX_OK"
+                ;;
+            -V | --version)
+                common_print_version
+                exit "$EX_OK"
+                ;;
+            --)
+                shift
+                break
+                ;;
+            -* )
+                die "Неизвестная опция: $1" "$EX_USAGE"
+                ;;
+            *)
+                die "Неожиданный аргумент: $1" "$EX_USAGE"
+                ;;
+        esac
+        shift
     done
-    return "$status"
+
+    if [ $# -gt 0 ]; then
+        die "Неожиданный аргумент: $1" "$EX_USAGE"
+    fi
 }
 
-perform_upload() {
-    if [ -z "$UPLOAD_TARGET" ]; then
+get_firmware_tag() {
+    release_desc=$(common_openwrt_description 2>/dev/null || printf '')
+    if [ -n "$release_desc" ]; then
+        common_sanitize_token "$release_desc"
         return 0
     fi
 
-    if [ "$UPLOAD_SCHEME" = 'scp' ]; then
-        if [ "$DRY_RUN_ENABLED" -eq 1 ]; then
-            log_info 'Режим dry-run: готовая команда SCP'
-            log_info "$(build_scp_preview)"
-            return 0
-        fi
-
-        set -- scp
-        if [ "$SSH_PORT" != '22' ]; then
-            set -- "$@" -P "$SSH_PORT"
-        fi
-        if [ -n "$IDENTITY_FILE" ]; then
-            set -- "$@" -i "$IDENTITY_FILE"
-        fi
-        set -- "$@" -o StrictHostKeyChecking=yes
-        if [ -n "$KNOWN_HOSTS_FILE" ]; then
-            set -- "$@" -o "UserKnownHostsFile=$KNOWN_HOSTS_FILE"
-        fi
-        set -- "$@" "$ARCHIVE_PATH" "$UPLOAD_REMOTE_SPEC"
-
-        log_info "Загрузка архива через SCP: $UPLOAD_REMOTE_SPEC"
-        run_with_retries "$UPLOAD_RETRY" "$@"
-        status=$?
-        return "$status"
+    if command -v uname >/dev/null 2>&1; then
+        common_sanitize_token "$(uname -n)"
+        return 0
     fi
 
-    if [ "$UPLOAD_SCHEME" = 'sftp' ]; then
-        if [ "$DRY_RUN_ENABLED" -eq 1 ]; then
-            log_info 'Режим dry-run: загрузка через SFTP (команда put)'
-            log_info "put \"$ARCHIVE_PATH\" \"$UPLOAD_REMOTE_PATH\""
-            return 0
-        fi
+    printf 'OpenWrt\n'
+}
 
-        batch_file=$(mktemp "$(common_tmpdir)/sftp-batch.XXXXXX")
-        if [ -z "$batch_file" ]; then
-            die 'Не удалось создать временный файл для SFTP' "$EX_SOFTWARE"
-        fi
-        printf 'put "%s" "%s"\n' "$ARCHIVE_PATH" "$UPLOAD_REMOTE_PATH" >"$batch_file"
+build_archive_metadata() {
+    firmware=$(get_firmware_tag)
+    timestamp=$(date +'%Y-%m-%d_%H-%M-%S')
+    ARCHIVE_FILENAME="fullbackup_${firmware}_${timestamp}.tar.gz"
 
-        set -- sftp
-        if [ -n "$IDENTITY_FILE" ]; then
-            set -- "$@" -i "$IDENTITY_FILE"
-        fi
-        if [ "$SSH_PORT" != '22' ]; then
-            set -- "$@" -P "$SSH_PORT"
-        fi
-        set -- "$@" -o StrictHostKeyChecking=yes
-        if [ -n "$KNOWN_HOSTS_FILE" ]; then
-            set -- "$@" -o "UserKnownHostsFile=$KNOWN_HOSTS_FILE"
-        fi
-        set -- "$@" -b "$batch_file" "$UPLOAD_USER_HOST"
-
-        log_info "Загрузка архива через SFTP: $UPLOAD_USER_HOST -> $UPLOAD_REMOTE_PATH"
-        run_with_retries "$UPLOAD_RETRY" "$@"
-        status=$?
-        rm -f "$batch_file"
-        return "$status"
+    output_base=${OUTPUT_DIR%/}
+    if [ -z "$output_base" ]; then
+        output_base='/'
     fi
 
-    return 0
+    ARCHIVE_PATH="$output_base/$ARCHIVE_FILENAME"
+
+    if [ -e "$ARCHIVE_PATH" ]; then
+        if [ "$DRY_RUN" -eq 1 ]; then
+            log_warn "Файл уже существует и будет перезаписан при обычном запуске: $ARCHIVE_PATH"
+        else
+            die "Файл уже существует: $ARCHIVE_PATH" "$EX_SOFTWARE"
+        fi
+    fi
+}
+
+remove_tar_exclude_file() {
+    # shellcheck disable=SC2034
+    status=$1
+    if [ -n "$TAR_EXCLUDE_FILE" ] && [ -f "$TAR_EXCLUDE_FILE" ]; then
+        rm -f "$TAR_EXCLUDE_FILE"
+    fi
+    TAR_EXCLUDE_FILE=''
+}
+
+backup_cleanup() {
+    status=$1
+
+    if [ "$status" -ne 0 ] && [ "$REMOVE_ARCHIVE_ON_FAILURE" -eq 1 ] && [ -n "$ARCHIVE_PATH" ]; then
+        rm -f "$ARCHIVE_PATH" >/dev/null 2>&1 || true
+    fi
+
+    if [ "$SMB_ENABLED" -eq 1 ] && [ "$DRY_RUN" -eq 0 ] && [ "$status" -ne 0 ]; then
+        if [ "$SMB_SHARE_CREATED" -eq 1 ] && [ "$SMB_SHARE_EXISTED" -eq 0 ]; then
+            remove_smb_share
+        fi
+        if [ "$SMB_USER_CREATED" -eq 1 ] && command -v ksmbd.deluser >/dev/null 2>&1; then
+            ksmbd.deluser "$SMB_USER" >/dev/null 2>&1 || true
+        fi
+    fi
+}
+
+common_add_cleanup backup_cleanup
+
+prepare_environment() {
+    require_cmd tar
+    require_cmd date
+
+    OUTPUT_DIR=$(resolve_directory "$OUTPUT_DIR")
+    OVERLAY_PATH=$(resolve_directory "$OVERLAY_PATH")
+
+    if [ ! -d "$OVERLAY_PATH" ]; then
+        die "Каталог для архивации не найден: $OVERLAY_PATH" "$EX_SOFTWARE"
+    fi
+
+    if [ "$DRY_RUN" -eq 0 ]; then
+        if ! mkdir -p "$OUTPUT_DIR"; then
+            die "Не удалось создать каталог: $OUTPUT_DIR" "$EX_SOFTWARE"
+        fi
+        if [ ! -w "$OUTPUT_DIR" ]; then
+            die "Каталог недоступен для записи: $OUTPUT_DIR" "$EX_SOFTWARE"
+        fi
+    fi
+}
+
+build_tar_exclude_file() {
+    overlay_parent=$1
+    overlay_name=$2
+
+    exclude_file=$(mktemp "$(common_tmpdir)/tar-exclude.XXXXXX")
+    if [ -z "$exclude_file" ]; then
+        die 'Не удалось подготовить список исключений для tar' "$EX_SOFTWARE"
+    fi
+
+    {
+        printf '%s/work\n' "$overlay_name"
+        printf '%s/work/*\n' "$overlay_name"
+        printf '%s/upper/run\n' "$overlay_name"
+        printf '%s/upper/run/*\n' "$overlay_name"
+        printf '%s/upper/etc/os-release\n' "$overlay_name"
+        printf '%s/upper/usr/lib/os-release\n' "$overlay_name"
+    } >"$exclude_file"
+
+    if ! (
+        cd "$overlay_parent" 2>/dev/null &&
+            find "$overlay_name" \
+                \( -path "$overlay_name/work" -o -path "$overlay_name/work/*" \
+                -o -path "$overlay_name/upper/run" -o -path "$overlay_name/upper/run/*" \
+                -o -path "$overlay_name/upper/etc/os-release" \
+                -o -path "$overlay_name/upper/usr/lib/os-release" \) -prune \
+                -o \( -type s -o -type p -o -type b -o -type c \) -print
+    ) >>"$exclude_file"; then
+        die 'Не удалось подготовить список исключений для tar' "$EX_SOFTWARE"
+    fi
+
+    TAR_EXCLUDE_FILE=$exclude_file
+    common_add_cleanup remove_tar_exclude_file
+}
+
+print_scp_hint() {
+    host=$(get_hostname)
+    if [ -z "$host" ]; then
+        host='router'
+    fi
+    log_info "Скопируйте архив на локальную машину: scp root@${host}:$ARCHIVE_PATH <destination>"
+}
+
+create_archive() {
+    build_archive_metadata
+
+    log_info "Исходный каталог: $OVERLAY_PATH"
+    log_info "Каталог назначения: $OUTPUT_DIR"
+
+    if [ "$DRY_RUN" -eq 1 ]; then
+        log_info 'Режим dry-run: архив не создавался'
+        log_info "Режим dry-run: запланированный путь: $ARCHIVE_PATH"
+        return 0
+    fi
+
+    overlay_parent=$(dirname "$OVERLAY_PATH")
+    overlay_name=$(basename "$OVERLAY_PATH")
+
+    build_tar_exclude_file "$overlay_parent" "$overlay_name"
+
+    REMOVE_ARCHIVE_ON_FAILURE=1
+    if ! (
+        cd "$overlay_parent" 2>/dev/null &&
+            tar -czpf "$ARCHIVE_PATH" \
+                --numeric-owner \
+                --preserve-permissions \
+                --same-owner \
+                -X "$TAR_EXCLUDE_FILE" \
+                "$overlay_name"
+    ); then
+        die 'Не удалось создать архив' "$EX_SOFTWARE"
+    fi
+
+    REMOVE_ARCHIVE_ON_FAILURE=0
+    log_info "Архив сохранён: $ARCHIVE_PATH"
+
+    if command -v du >/dev/null 2>&1; then
+        size=$(du -h "$ARCHIVE_PATH" 2>/dev/null | awk 'NR==1 {print $1}')
+        if [ -n "$size" ]; then
+            log_info "Размер архива: $size"
+        fi
+    fi
+
+    print_scp_hint
+}
+
+generate_password() {
+    if command -v tr >/dev/null 2>&1; then
+        candidate=$(tr -dc 'A-Za-z0-9' </dev/urandom 2>/dev/null | head -c 16)
+        if [ -n "$candidate" ]; then
+            printf '%s\n' "$candidate"
+            return 0
+        fi
+    fi
+    printf 'owrt_%s\n' "$(date +'%H%M%S')"
+}
+
+ensure_ksmbd_dependencies() {
+    require_cmd ksmbd.adduser
+    require_cmd ksmbd.deluser
+    require_cmd uci
+    if [ ! -x "$KSMBD_SERVICE" ]; then
+        die "Служба ksmbd недоступна (нет $KSMBD_SERVICE)" "$EX_UNAVAILABLE"
+    fi
 }
 
 find_share_index_by_name() {
@@ -331,7 +372,7 @@ find_share_index_by_name() {
 }
 
 remove_smb_share() {
-    idx=$(find_share_index_by_name "$KSMBD_SHARE_NAME" 2>/dev/null || printf '')
+    idx=$(find_share_index_by_name "$SMB_SHARE_NAME" 2>/dev/null || printf '')
     if [ -n "$idx" ]; then
         uci delete "ksmbd.@share[$idx]" >/dev/null 2>&1 || true
         uci commit ksmbd >/dev/null 2>&1 || true
@@ -339,388 +380,6 @@ remove_smb_share() {
             "$KSMBD_SERVICE" restart >/dev/null 2>&1 || true
         fi
     fi
-}
-
-backup_cleanup() {
-    status=$1
-
-    if [ "$status" -ne 0 ] && [ "$REMOVE_ARCHIVE_ON_FAILURE" -eq 1 ] && [ -n "$ARCHIVE_PATH" ]; then
-        rm -f "$ARCHIVE_PATH"
-    fi
-
-    if [ "$status" -ne 0 ] && [ "$EXPORT_MODE" = 'smb' ] && [ "$KSMBD_SHARE_CREATED" -eq 1 ] && [ "$KSMBD_SHARE_EXISTED" -eq 0 ]; then
-        remove_smb_share
-    fi
-}
-
-common_add_cleanup backup_cleanup
-
-parse_args() {
-    OPTIND=1
-
-    while getopts '-:hVqvn' opt; do
-        case "$opt" in
-            h)
-                usage
-                exit "$EX_OK"
-                ;;
-            V)
-                common_print_version
-                exit "$EX_OK"
-                ;;
-            q)
-                LOG_LEVEL=0
-                ;;
-            v)
-                if [ "$LOG_LEVEL" -lt 2 ]; then
-                    LOG_LEVEL=$((LOG_LEVEL + 1))
-                fi
-                ;;
-            n)
-                DRY_RUN_ENABLED=1
-                ;;
-            -)
-                if [ -z "$OPTARG" ]; then
-                    break
-                fi
-                case "$OPTARG" in
-                    help)
-                        usage
-                        exit "$EX_OK"
-                        ;;
-                    version)
-                        common_print_version
-                        exit "$EX_OK"
-                        ;;
-                    quiet)
-                        LOG_LEVEL=0
-                        ;;
-                    quiet=*)
-                        value=${OPTARG#quiet=}
-                        if [ "$(common_to_bool "$value")" -eq 1 ]; then
-                            LOG_LEVEL=0
-                        fi
-                        ;;
-                    verbose)
-                        if [ "$LOG_LEVEL" -lt 2 ]; then
-                            LOG_LEVEL=$((LOG_LEVEL + 1))
-                        fi
-                        ;;
-                    verbose=*)
-                        value=${OPTARG#verbose=}
-                        if [ "$(common_to_bool "$value")" -eq 1 ] && [ "$LOG_LEVEL" -lt 2 ]; then
-                            LOG_LEVEL=$((LOG_LEVEL + 1))
-                        fi
-                        ;;
-                    dry-run)
-                        DRY_RUN_ENABLED=1
-                        ;;
-                    dry-run=*)
-                        value=${OPTARG#dry-run=}
-                        DRY_RUN_ENABLED=$(common_to_bool "$value")
-                        ;;
-                    export)
-                        EXPORT_MODE=$(common_getopts_consume_value 'export' "$@")
-                        ;;
-                    export=*)
-                        EXPORT_MODE=${OPTARG#export=}
-                        ;;
-                    emit-scp-cmd)
-                        EMIT_SCP_CMD=1
-                        ;;
-                    emit-scp-cmd=*)
-                        value=${OPTARG#emit-scp-cmd=}
-                        EMIT_SCP_CMD=$(common_to_bool "$value")
-                        ;;
-                    ssh-host)
-                        SSH_HOST=$(common_getopts_consume_value 'ssh-host' "$@")
-                        ;;
-                    ssh-host=*)
-                        SSH_HOST=${OPTARG#ssh-host=}
-                        ;;
-                    ssh-port)
-                        SSH_PORT=$(common_getopts_consume_value 'ssh-port' "$@")
-                        ;;
-                    ssh-port=*)
-                        SSH_PORT=${OPTARG#ssh-port=}
-                        ;;
-                    ssh-user)
-                        SSH_USER=$(common_getopts_consume_value 'ssh-user' "$@")
-                        ;;
-                    ssh-user=*)
-                        SSH_USER=${OPTARG#ssh-user=}
-                        ;;
-                    output)
-                        OUT_DIR=$(common_getopts_consume_value 'output' "$@")
-                        ;;
-                    output=*)
-                        OUT_DIR=${OPTARG#output=}
-                        ;;
-                    out-dir)
-                        OUT_DIR=$(common_getopts_consume_value 'out-dir' "$@")
-                        ;;
-                    out-dir=*)
-                        OUT_DIR=${OPTARG#out-dir=}
-                        ;;
-                    upload)
-                        value=$(common_getopts_consume_value 'upload' "$@")
-                        parse_upload_target "$value"
-                        ;;
-                    upload=*)
-                        parse_upload_target "${OPTARG#upload=}"
-                        ;;
-                    identity)
-                        IDENTITY_FILE=$(common_getopts_consume_value 'identity' "$@")
-                        ;;
-                    identity=*)
-                        IDENTITY_FILE=${OPTARG#identity=}
-                        ;;
-                    known-hosts)
-                        KNOWN_HOSTS_FILE=$(common_getopts_consume_value 'known-hosts' "$@")
-                        ;;
-                    known-hosts=*)
-                        KNOWN_HOSTS_FILE=${OPTARG#known-hosts=}
-                        ;;
-                    retry)
-                        UPLOAD_RETRY=$(common_getopts_consume_value 'retry' "$@")
-                        ;;
-                    retry=*)
-                        UPLOAD_RETRY=${OPTARG#retry=}
-                        ;;
-                    *)
-                        die "Неизвестная опция: --$OPTARG" "$EX_USAGE"
-                        ;;
-                esac
-                ;;
-            :)
-                die "Опция -$OPTARG требует аргумент" "$EX_USAGE"
-                ;;
-            ?)
-                die "Неизвестная опция: -$OPTARG" "$EX_USAGE"
-                ;;
-        esac
-    done
-
-    shift $((OPTIND - 1))
-
-    if [ $# -gt 0 ] && [ "$1" = '--' ]; then
-        shift
-    fi
-
-    if [ $# -gt 0 ]; then
-        die "Неожиданный аргумент: $1" "$EX_USAGE"
-    fi
-
-    case "$EXPORT_MODE" in
-        scp | smb | local) ;;
-        *)
-            die "Неподдерживаемый режим экспорта: $EXPORT_MODE" "$EX_USAGE"
-            ;;
-    esac
-
-    case "$SSH_PORT" in
-        '' | *[!0-9]*)
-            die 'Порт SSH должен быть целым числом' "$EX_USAGE"
-            ;;
-    esac
-
-    case "$UPLOAD_RETRY" in
-        '' | *[!0-9]*)
-            die 'Опция --retry должна быть положительным числом' "$EX_USAGE"
-            ;;
-        0)
-            die 'Опция --retry должна быть >= 1' "$EX_USAGE"
-            ;;
-    esac
-
-    OUT_DIR=$(to_absolute_path "$OUT_DIR")
-}
-
-sanitize_token() {
-    token=$1
-    printf '%s\n' "$token" | tr ' ' '_' | tr -c 'A-Za-z0-9_.-' '_'
-}
-
-get_firmware_tag() {
-    release_desc=$(common_openwrt_description 2>/dev/null || printf '')
-    if [ -n "$release_desc" ]; then
-        sanitize_token "$release_desc"
-        return 0
-    fi
-
-    if command -v uname >/dev/null 2>&1; then
-        sanitize_token "$(uname -n)"
-        return 0
-    fi
-
-    printf '%s\n' 'OpenWrt'
-}
-
-prepare_environment() {
-    require_cmd tar
-    require_cmd date
-
-    if [ "$EXPORT_MODE" = 'scp' ]; then
-        log_debug 'Режим экспорта: SCP'
-    elif [ "$EXPORT_MODE" = 'smb' ]; then
-        log_debug 'Режим экспорта: SMB'
-    else
-        log_debug 'Режим экспорта: local'
-    fi
-
-    if [ "$DRY_RUN_ENABLED" -eq 0 ]; then
-        if ! mkdir -p "$OUT_DIR"; then
-            die "Не удалось создать каталог: $OUT_DIR" "$EX_SOFTWARE"
-        fi
-
-        if [ ! -w "$OUT_DIR" ]; then
-            die "Каталог недоступен для записи: $OUT_DIR" "$EX_SOFTWARE"
-        fi
-
-        if [ ! -d "$OVERLAY_PATH" ]; then
-            die "Каталог для архивации не найден: $OVERLAY_PATH" "$EX_SOFTWARE"
-        fi
-    fi
-}
-
-create_archive() {
-    firmware=$(get_firmware_tag)
-    timestamp_label=$(date +'%Y-%m-%d_%H-%M-%S')
-    ARCHIVE_FILENAME="fullbackup_${firmware}_${timestamp_label}.tar.gz"
-    ARCHIVE_PATH="${OUT_DIR%/}/$ARCHIVE_FILENAME"
-
-    if [ -e "$ARCHIVE_PATH" ]; then
-        die "Файл уже существует: $ARCHIVE_PATH" "$EX_SOFTWARE"
-    fi
-
-    case "$OVERLAY_PATH" in
-        /)
-            overlay_base='/'
-            exclude_work='/work'
-            exclude_run='/upper/run'
-            exclude_os_release='/upper/etc/os-release'
-            exclude_usr_os_release='/upper/usr/lib/os-release'
-            ;;
-        *)
-            overlay_base=${OVERLAY_PATH%/}
-            if [ -z "$overlay_base" ]; then
-                overlay_base='/overlay'
-            fi
-            exclude_work="$overlay_base/work"
-            exclude_run="$overlay_base/upper/run"
-            exclude_os_release="$overlay_base/upper/etc/os-release"
-            exclude_usr_os_release="$overlay_base/upper/usr/lib/os-release"
-            ;;
-    esac
-
-    if [ "$DRY_RUN_ENABLED" -eq 1 ]; then
-        log_info 'Режим dry-run: действия выполняются без побочных эффектов'
-        log_info "Режим dry-run: архив не создавался (запланированный путь: $ARCHIVE_PATH)"
-        return 0
-    fi
-
-    log_info "Создание архива: $ARCHIVE_PATH"
-    REMOVE_ARCHIVE_ON_FAILURE=1
-
-    if ! tar -czpf "$ARCHIVE_PATH" \
-        --preserve-permissions \
-        --same-owner \
-        --exclude="$exclude_work" \
-        --exclude="$exclude_run" \
-        --exclude="$exclude_os_release" \
-        --exclude="$exclude_usr_os_release" \
-        "$overlay_base"; then
-        die 'Не удалось создать архив' "$EX_SOFTWARE"
-    fi
-
-    REMOVE_ARCHIVE_ON_FAILURE=0
-
-    log_info "Архив сохранён: $ARCHIVE_PATH"
-
-    if command -v du >/dev/null 2>&1; then
-        size=$(du -h "$ARCHIVE_PATH" 2>/dev/null | awk '{print $1}' | head -n 1)
-        if [ -n "$size" ]; then
-            log_info "Размер архива: $size"
-        fi
-    fi
-}
-
-ensure_ksmbd_dependencies() {
-    require_cmd ksmbd.adduser
-    require_cmd uci
-    if [ ! -x "$KSMBD_SERVICE" ]; then
-        die "Служба ksmbd недоступна (нет $KSMBD_SERVICE)" "$EX_UNAVAILABLE"
-    fi
-
-    if command -v ksmbd.status >/dev/null 2>&1; then
-        log_debug 'Обнаружен ksmbd.status'
-    fi
-}
-
-generate_password() {
-    if command -v tr >/dev/null 2>&1; then
-        candidate=$(tr -dc 'A-Za-z0-9' </dev/urandom 2>/dev/null | head -c 16)
-        if [ -n "$candidate" ]; then
-            printf '%s\n' "$candidate"
-            return 0
-        fi
-    fi
-    printf 'owrt_%s\n' "$(date +'%H%M%S')"
-}
-
-setup_smb_export() {
-    if [ "$DRY_RUN_ENABLED" -eq 1 ]; then
-        log_info 'Режим dry-run: SMB-экспорт не настраивается'
-        return 0
-    fi
-
-    ensure_ksmbd_dependencies
-
-    if [ -z "$KSMBD_PASSWORD" ]; then
-        KSMBD_PASSWORD=$(generate_password)
-    fi
-
-    log_info "Обновление пользователя SMB: $KSMBD_USER"
-    ksmbd.adduser "$KSMBD_USER" -p "$KSMBD_PASSWORD"
-
-    share_index=$(find_share_index_by_name "$KSMBD_SHARE_NAME" 2>/dev/null || printf '')
-    if [ -n "$share_index" ]; then
-        KSMBD_SHARE_EXISTED=1
-        target_index=$share_index
-        log_debug "Используется существующая шара @$share_index"
-    else
-        log_info "Создание SMB-шары: $KSMBD_SHARE_NAME"
-        if ! uci add ksmbd share >/dev/null 2>&1; then
-            die 'Не удалось создать раздел ksmbd share' "$EX_SOFTWARE"
-        fi
-        target_index='-1'
-        KSMBD_SHARE_EXISTED=0
-    fi
-
-    uci set "ksmbd.@share[$target_index].name=$KSMBD_SHARE_NAME"
-    uci set "ksmbd.@share[$target_index].path=$OUT_DIR"
-    uci set "ksmbd.@share[$target_index].guest_ok='no'"
-    uci set "ksmbd.@share[$target_index].read_only='yes'"
-    uci set "ksmbd.@share[$target_index].create_mask='0644'"
-    uci set "ksmbd.@share[$target_index].dir_mask='0755'"
-    uci set "ksmbd.@share[$target_index].users=$KSMBD_USER"
-    uci commit ksmbd
-
-    KSMBD_SHARE_CREATED=1
-
-    if ! "$KSMBD_SERVICE" restart >/dev/null 2>&1; then
-        die 'Не удалось перезапустить службу ksmbd' "$EX_SOFTWARE"
-    fi
-
-    host=$(get_hostname)
-    ip=$(get_primary_ip)
-
-    if [ -n "$ip" ]; then
-        log_info "SMB-шара доступна по адресу \\\\$ip\\\\$KSMBD_SHARE_NAME"
-    fi
-    log_info "SMB-шара доступна по имени \\\\$host\\\\$KSMBD_SHARE_NAME"
-    log_info "Имя пользователя: $KSMBD_USER"
-    log_info "Пароль: $KSMBD_PASSWORD"
 }
 
 get_hostname() {
@@ -735,7 +394,7 @@ get_hostname() {
         hostname 2>/dev/null
         return 0
     fi
-    printf '%s\n' "$SSH_HOST"
+    printf 'OpenWrt\n'
 }
 
 get_primary_ip() {
@@ -759,50 +418,69 @@ get_primary_ip() {
     return 1
 }
 
-emit_scp_instruction() {
-    scp_opts=''
-    if [ "$SSH_PORT" != '22' ]; then
-        scp_opts="-P $SSH_PORT"
+setup_smb_export() {
+    if [ "$SMB_ENABLED" -ne 1 ]; then
+        return 0
     fi
 
-    command_text="scp"
-    if [ -n "$scp_opts" ]; then
-        command_text="$command_text $scp_opts"
+    if [ "$DRY_RUN" -eq 1 ]; then
+        log_info 'Режим dry-run: SMB-экспорт не настраивается'
+        return 0
     fi
-    command_text="$command_text $SSH_USER@$SSH_HOST:$ARCHIVE_PATH <destination>"
 
-    log_info "Готовая команда SCP: $command_text"
+    ensure_ksmbd_dependencies
 
-    if [ "$EMIT_SCP_CMD" -eq 1 ]; then
-        printf '%s\n' "$command_text"
+    if [ -z "$SMB_PASSWORD" ]; then
+        SMB_PASSWORD=$(generate_password)
     fi
+
+    log_info "Настройка SMB-шары: $SMB_SHARE_NAME"
+    if ksmbd.adduser "$SMB_USER" -p "$SMB_PASSWORD"; then
+        SMB_USER_CREATED=1
+    else
+        die 'Не удалось создать пользователя SMB' "$EX_SOFTWARE"
+    fi
+
+    share_index=$(find_share_index_by_name "$SMB_SHARE_NAME" 2>/dev/null || printf '')
+    if [ -n "$share_index" ]; then
+        SMB_SHARE_EXISTED=1
+        target_index=$share_index
+    else
+        SMB_SHARE_EXISTED=0
+        target_index='-1'
+    fi
+
+    uci set "ksmbd.@share[$target_index].name=$SMB_SHARE_NAME"
+    uci set "ksmbd.@share[$target_index].path=$OUTPUT_DIR"
+    uci set "ksmbd.@share[$target_index].guest_ok=no"
+    uci set "ksmbd.@share[$target_index].read_only=yes"
+    uci set "ksmbd.@share[$target_index].create_mask=0644"
+    uci set "ksmbd.@share[$target_index].dir_mask=0755"
+    uci set "ksmbd.@share[$target_index].users=$SMB_USER"
+    uci commit ksmbd
+
+    SMB_SHARE_CREATED=1
+
+    if ! "$KSMBD_SERVICE" restart >/dev/null 2>&1; then
+        die 'Не удалось перезапустить службу ksmbd' "$EX_SOFTWARE"
+    fi
+
+    host=$(get_hostname)
+    ip=$(get_primary_ip)
+
+    if [ -n "$ip" ]; then
+        log_info "SMB-шара доступна по адресу \\\\${ip}\\\\$SMB_SHARE_NAME"
+    fi
+    log_info "SMB-шара доступна по имени \\\\${host}\\\\$SMB_SHARE_NAME"
+    log_info "Имя пользователя: $SMB_USER"
+    log_info "Пароль: $SMB_PASSWORD"
+    log_info 'После копирования отключите шару и удалите пользователя: ksmbd.deluser owrt_backup'
 }
 
 parse_args "$@"
 
 prepare_environment
-prepare_upload_environment
-
 create_archive
-
-perform_upload
-upload_status=$?
-if [ "$upload_status" -ne 0 ]; then
-    exit "$upload_status"
-fi
-
-case "$EXPORT_MODE" in
-    scp)
-        emit_scp_instruction
-        ;;
-    smb)
-        setup_smb_export
-        ;;
-    local)
-        if [ "$DRY_RUN_ENABLED" -eq 0 ]; then
-            log_info "Архив сохранён в $ARCHIVE_PATH"
-        fi
-        ;;
-esac
+setup_smb_export
 
 exit "$EX_OK"

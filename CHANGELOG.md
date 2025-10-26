@@ -58,3 +58,7 @@ Tagged releases are published via GitHub Actions and update this changelog along
 
 ## [Unreleased]
 
+### Changed
+
+- **backup:** simplify CLI to core flags, add safer tar creation, and make SMB export optional by default.
+

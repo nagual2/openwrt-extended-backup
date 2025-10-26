@@ -1,0 +1,23 @@
+#!/bin/sh
+set -eu
+
+REAL_DATE=${MOCK_REAL_DATE:-/bin/date}
+
+if [ "$#" -eq 1 ]; then
+    case "$1" in
+        '+%Y-%m-%d %H:%M:%S')
+            printf '2024-01-01 00:00:00\n'
+            exit 0
+            ;;
+        '+%Y-%m-%d_%H-%M-%S')
+            printf '2024-01-01_00-00-00\n'
+            exit 0
+            ;;
+        '+%H%M%S')
+            printf '000000\n'
+            exit 0
+            ;;
+    esac
+fi
+
+exec "$REAL_DATE" "$@"

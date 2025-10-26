@@ -1,281 +1,113 @@
 #!/usr/bin/env bats
 
+load 'helpers/mocks'
+
 setup() {
-    PROJECT_ROOT=$(cd "$BATS_TEST_DIRNAME/.." 2>/dev/null && pwd)
-    SCRIPT_PATH="$PROJECT_ROOT/scripts/openwrt_full_backup"
+  mock_setup
+  mock_use_fake_root
+  mock_install_release_fixture
 
-    PATH_ORIG=$PATH
-    TEST_ROOT=$(mktemp -d)
-    BIN_DIR="$TEST_ROOT/bin"
-    mkdir -p "$BIN_DIR"
-    PATH="$BIN_DIR:$PATH_ORIG"
-    export PATH
+  OVERLAY_DIR="${MOCK_WORKSPACE}/overlay"
+  mkdir -p "${OVERLAY_DIR}/upper/etc"
+  printf 'example-data\n' >"${OVERLAY_DIR}/upper/etc/sample.txt"
 
-    REAL_DATE=$(command -v date)
-    cat >"$BIN_DIR/date" <<EOF
-#!/bin/sh
-if [ "$#" -eq 0 ]; then
-    exec "$REAL_DATE"
-fi
-case "$1" in
-    '+%Y-%m-%d %H:%M:%S')
-        printf '2024-01-01 00:00:00\n'
-        ;;
-    '+%Y-%m-%d_%H-%M-%S')
-        printf '2024-01-01_00-00-00\n'
-        ;;
-    '+%H%M%S')
-        printf '000000\n'
-        ;;
-    *)
-        exec "$REAL_DATE" "$@"
-        ;;
-esac
-EOF
-    chmod +x "$BIN_DIR/date"
-
-    REAL_UNAME=$(command -v uname)
-    cat >"$BIN_DIR/uname" <<EOF
-#!/bin/sh
-if [ "$#" -gt 0 ]; then
-    case "$1" in
-        -n)
-            printf 'TestRouter\n'
-            exit 0
-            ;;
-    esac
-fi
-exec "$REAL_UNAME" "$@"
-EOF
-    chmod +x "$BIN_DIR/uname"
-
-    cat >"$BIN_DIR/upload_stub" <<'EOF'
-#!/bin/sh
-set -eu
-command_name=$(basename "$0")
-log=${MOCK_UPLOAD_LOG:-}
-if [ -n "$log" ]; then
-    printf '%s %s\n' "$command_name" "$*" >>"$log"
-fi
-
-batch=''
-if [ "$command_name" = "sftp" ]; then
-    while [ "$#" -gt 0 ]; do
-        case "$1" in
-            -b)
-                shift
-                if [ "$#" -gt 0 ]; then
-                    batch=$1
-                fi
-                ;;
-        esac
-        shift || break
-    done
-    if [ -n "$batch" ] && [ -n "${MOCK_SFTP_BATCH_LOG:-}" ] && [ -f "$batch" ]; then
-        cat "$batch" >"${MOCK_SFTP_BATCH_LOG}"
-    fi
-fi
-
-fail_limit=${MOCK_UPLOAD_FAIL_LIMIT:-0}
-fail_code=${MOCK_UPLOAD_FAIL_CODE:-1}
-if [ "$fail_limit" -gt 0 ]; then
-    counter_file=${MOCK_UPLOAD_FAIL_FILE:-"${TMPDIR:-/tmp}/mock-upload-fail-count"}
-    count=$(cat "$counter_file" 2>/dev/null || printf '0')
-    count=$((count + 1))
-    printf '%s\n' "$count" >"$counter_file"
-    if [ "$count" -le "$fail_limit" ]; then
-        exit "$fail_code"
-    fi
-fi
-
-exit ${MOCK_UPLOAD_EXIT_CODE:-0}
-EOF
-    chmod +x "$BIN_DIR/upload_stub"
-    ln -s upload_stub "$BIN_DIR/scp"
-    ln -s upload_stub "$BIN_DIR/sftp"
-
-    OVERLAY_DIR="$TEST_ROOT/overlay"
-    mkdir -p "$OVERLAY_DIR"
-    printf 'example-data' >"$OVERLAY_DIR/sample.txt"
-    export OVERLAY_SOURCE="$OVERLAY_DIR"
-
-    OUT_DIR="$TEST_ROOT/out"
-    EXPECTED_ARCHIVE="$OUT_DIR/fullbackup_TestRouter_2024-01-01_00-00-00.tar.gz"
+  OUTPUT_DIR="${MOCK_WORKSPACE}/out"
+  rm -rf "${OUTPUT_DIR}"
 }
 
 teardown() {
-    PATH=$PATH_ORIG
-    rm -rf "$TEST_ROOT"
-    unset MOCK_UPLOAD_LOG MOCK_SFTP_BATCH_LOG MOCK_UPLOAD_FAIL_LIMIT \
-        MOCK_UPLOAD_FAIL_FILE MOCK_UPLOAD_FAIL_CODE MOCK_UPLOAD_EXIT_CODE
+  unset KSMBD_PASSWORD
+  mock_teardown
 }
 
-mock_tar_setup() {
-    MOCK_TAR_DIR="$TEST_ROOT/mock-tar"
-    mkdir -p "$MOCK_TAR_DIR"
-    MOCK_TAR_MARKER="$TEST_ROOT/tar-invoked"
-    rm -f "$MOCK_TAR_MARKER"
-    cat >"$MOCK_TAR_DIR/tar" <<EOF
-#!/bin/sh
-touch "$MOCK_TAR_MARKER"
-printf 'mock tar executed\n' >&2
-exit 1
-EOF
-    chmod +x "$MOCK_TAR_DIR/tar"
+expected_archive_path() {
+  printf '%s/fullbackup_OpenWrt_23.05.0_2024-01-01_00-00-00.tar.gz\n' "${OUTPUT_DIR}"
 }
 
-@test "scp upload invokes scp with provided options" {
-    identity="$TEST_ROOT/id_ed25519"
-    known_hosts="$TEST_ROOT/known_hosts"
-    touch "$identity" "$known_hosts"
+@test "creates archive in output directory" {
+  mock_reset_command_log
 
-    export MOCK_UPLOAD_LOG="$TEST_ROOT/scp.log"
+  mock_run_backup --overlay "${OVERLAY_DIR}" --output "${OUTPUT_DIR}"
 
-    run "$SCRIPT_PATH" \
-        --upload "scp://backup@example.com:/remote/archive.tar.gz" \
-        --identity "$identity" \
-        --known-hosts "$known_hosts" \
-        --ssh-port 2022 \
-        --retry 1 \
-        --output "$OUT_DIR" \
-        --export=scp
+  assert_success
 
-    [ "$status" -eq 0 ]
-    [ -f "$EXPECTED_ARCHIVE" ]
+  expected="$(expected_archive_path)"
+  [ -f "${expected}" ]
 
-    command_logged=$(cat "$MOCK_UPLOAD_LOG")
-    [[ "$command_logged" == scp* ]]
-    [[ "$command_logged" == *"-P 2022"* ]]
-    [[ "$command_logged" == *"-i $identity"* ]]
-    [[ "$command_logged" == *"UserKnownHostsFile=$known_hosts"* ]]
-    [[ "$command_logged" == *"StrictHostKeyChecking=yes"* ]]
-    [[ "$command_logged" == *"$EXPECTED_ARCHIVE"* ]]
-    [[ "$command_logged" == *"backup@example.com:/remote/archive.tar.gz"* ]]
+  tar_line=$(grep '^tar ' "${MOCK_COMMAND_LOG}" | head -n 1)
+  [[ "${tar_line}" == *"--numeric-owner"* ]]
+  [[ "${tar_line}" == *"--same-owner"* ]]
+  [[ "${tar_line}" == *"-X "* ]]
+  [[ "${tar_line}" == *" overlay" ]]
+
+  if grep -q 'ksmbd' "${MOCK_COMMAND_LOG}"; then
+    fail "unexpected ksmbd invocation: $(cat "${MOCK_COMMAND_LOG}")"
+  fi
+
+  [[ "${output}" == *"Архив сохранён: ${expected}"* ]]
+  [[ "${output}" == *"scp root@"* ]]
 }
 
-@test "sftp upload writes batch file" {
-    export MOCK_UPLOAD_LOG="$TEST_ROOT/sftp.log"
-    export MOCK_SFTP_BATCH_LOG="$TEST_ROOT/batch.log"
+@test "dry-run skips tar invocation" {
+  mock_reset_command_log
 
-    run "$SCRIPT_PATH" \
-        --upload "sftp://backup@example.com:/remote/archive.tar.gz" \
-        --output "$OUT_DIR" \
-        --export=local
+  mock_run_backup --overlay "${OVERLAY_DIR}" --output "${OUTPUT_DIR}" --dry-run
 
-    [ "$status" -eq 0 ]
-    [ -f "$EXPECTED_ARCHIVE" ]
+  assert_success
 
-    command_logged=$(cat "$MOCK_UPLOAD_LOG")
-    [[ "$command_logged" == sftp* ]]
-    [[ "$command_logged" == *"-b"* ]]
-    [[ "$command_logged" == *"backup@example.com"* ]]
+  expected="$(expected_archive_path)"
+  [[ "${output}" == *"Режим dry-run: архив не создавался"* ]]
+  [[ "${output}" == *"${expected}"* ]]
+  [ ! -f "${expected}" ]
+  [ ! -d "${OUTPUT_DIR}" ]
 
-    read -r batch_line <"$MOCK_SFTP_BATCH_LOG"
-    expected_line="put \"$EXPECTED_ARCHIVE\" \"/remote/archive.tar.gz\""
-    [ "$batch_line" = "$expected_line" ]
+  if grep -q '^tar ' "${MOCK_COMMAND_LOG}"; then
+    fail "tar should not be executed in dry-run"
+  fi
 }
 
-@test "retry succeeds after transient failure" {
-    export MOCK_UPLOAD_LOG="$TEST_ROOT/retry.log"
-    export MOCK_UPLOAD_FAIL_LIMIT=1
-    export MOCK_UPLOAD_FAIL_FILE="$TEST_ROOT/retry-count"
+@test "SMB export configures ksmbd share" {
+  mock_reset_command_log
+  mock_install_ksmbd_service
 
-    run "$SCRIPT_PATH" \
-        --upload "scp://backup@example.com:/remote/archive.tar.gz" \
-        --output "$OUT_DIR" \
-        --retry 2 \
-        --export=local
+  export KSMBD_PASSWORD='Secret123'
 
-    [ "$status" -eq 0 ]
-    [ -f "$EXPECTED_ARCHIVE" ]
+  mock_run_backup --overlay "${OVERLAY_DIR}" --output "${OUTPUT_DIR}" --export=smb
 
-    attempt_count=$(wc -l <"$MOCK_UPLOAD_LOG")
-    [ "$attempt_count" -eq 2 ]
+  assert_success
+
+  expected="$(expected_archive_path)"
+  [ -f "${expected}" ]
+
+  mock_assert_log_contains "ksmbd.adduser owrt_backup -p Secret123"
+  mock_assert_log_contains "uci set ksmbd.@share[-1].path=${OUTPUT_DIR}"
+  mock_assert_log_contains "uci commit ksmbd"
+  mock_assert_log_contains "init.d/ksmbd restart"
+
+  if grep -q 'ksmbd.deluser' "${MOCK_COMMAND_LOG}"; then
+    fail "ksmbd.deluser should not be triggered on success"
+  fi
+
+  [[ "${output}" == *"SMB-шара доступна"* ]]
+  [[ "${output}" == *"Пароль: Secret123"* ]]
 }
 
-@test "upload failure propagates exit status" {
-    export MOCK_UPLOAD_LOG="$TEST_ROOT/fail.log"
-    export MOCK_UPLOAD_FAIL_LIMIT=5
-    export MOCK_UPLOAD_FAIL_FILE="$TEST_ROOT/fail-count"
-    export MOCK_UPLOAD_FAIL_CODE=7
+@test "rejects unsupported export mode" {
+  mock_reset_command_log
 
-    run "$SCRIPT_PATH" \
-        --upload "scp://backup@example.com:/remote/archive.tar.gz" \
-        --output "$OUT_DIR" \
-        --retry 2 \
-        --export=local
+  mock_run_backup --overlay "${OVERLAY_DIR}" --output "${OUTPUT_DIR}" --export=nfs
 
-    [ "$status" -eq 7 ]
-
-    attempt_count=$(wc -l <"$MOCK_UPLOAD_LOG")
-    [ "$attempt_count" -eq 2 ]
+  assert_status 64
+  [[ "${output}" == *"Неподдерживаемый режим экспорта: nfs"* ]]
 }
 
-@test "dry-run prints planned upload command" {
-    export MOCK_UPLOAD_LOG="$TEST_ROOT/dry.log"
+@test "fails when overlay directory missing" {
+  mock_reset_command_log
 
-    run "$SCRIPT_PATH" \
-        --upload "scp://backup@example.com:/remote/archive.tar.gz" \
-        --output "$OUT_DIR" \
-        --export=scp \
-        --dry-run
+  missing="${MOCK_WORKSPACE}/missing-overlay"
 
-    [ "$status" -eq 0 ]
-    [ ! -f "$EXPECTED_ARCHIVE" ]
-    [ ! -d "$OUT_DIR" ]
-    if [ -e "$MOCK_UPLOAD_LOG" ]; then
-        [ ! -s "$MOCK_UPLOAD_LOG" ]
-    fi
+  mock_run_backup --overlay "${missing}" --output "${OUTPUT_DIR}"
 
-    [[ "$output" == *"Режим dry-run: готовая команда SCP"* ]]
-    [[ "$output" == *"/remote/archive.tar.gz"* ]]
-}
-
-@test "usage mentions dry-run and output options" {
-    run "$SCRIPT_PATH" --help
-    [ "$status" -eq 0 ]
-    [[ "$output" == *"--output PATH"* ]]
-    [[ "$output" == *"-n, --dry-run"* ]]
-}
-
-@test "dry-run flag avoids side effects" {
-    mock_tar_setup
-    output_dir="$TEST_ROOT/custom-output"
-    PATH_WITH_MOCK="$MOCK_TAR_DIR:$PATH"
-
-    run env PATH="$PATH_WITH_MOCK" "$SCRIPT_PATH" -n --output "$output_dir"
-
-    [ "$status" -eq 0 ]
-    [[ "$output" == *"Режим dry-run: действия выполняются без побочных эффектов"* ]]
-    [[ "$output" == *"Режим dry-run: архив не создавался"* ]]
-    [[ "$output" == *"$output_dir"* ]]
-    [ ! -f "$MOCK_TAR_MARKER" ]
-    [ ! -d "$output_dir" ]
-}
-
-@test "DRY_RUN environment variable enables dry-run" {
-    mock_tar_setup
-    output_dir="$TEST_ROOT/env-output"
-    PATH_WITH_MOCK="$MOCK_TAR_DIR:$PATH"
-
-    run env DRY_RUN=true PATH="$PATH_WITH_MOCK" "$SCRIPT_PATH" --output "$output_dir"
-
-    [ "$status" -eq 0 ]
-    [[ "$output" == *"Режим dry-run: архив не создавался"* ]]
-    [ ! -f "$MOCK_TAR_MARKER" ]
-    [ ! -d "$output_dir" ]
-}
-
-@test "--output accepts relative paths" {
-    mock_tar_setup
-    PATH_WITH_MOCK="$MOCK_TAR_DIR:$PATH"
-    rm -rf relative-dir
-    expected="$(pwd)/relative-dir"
-
-    run env DRY_RUN=1 PATH="$PATH_WITH_MOCK" "$SCRIPT_PATH" --output relative-dir
-
-    [ "$status" -eq 0 ]
-    [[ "$output" == *"$expected"* ]]
-    [ ! -f "$MOCK_TAR_MARKER" ]
-    [ ! -d "$expected" ]
+  assert_status 70
+  [[ "${output}" == *"Каталог для архивации не найден"* ]]
 }
