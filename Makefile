@@ -20,9 +20,38 @@ else
 CONTROL_DEPENDS := tar
 endif
 
-.PHONY: all ipk clean install
+SHFMT ?= shfmt
+SHELLCHECK ?= shellcheck
+BATS ?= bats
+SHELL_QUALITY := ./scripts/ci/check-shell-quality.sh
+LIST_SHELLS := ./scripts/ci/list-shell-files.sh
 
-all: ipk
+.PHONY: all fmt fmt-check lint test package ipk clean install
+
+all: lint fmt-check test
+
+fmt:
+> set -- $$($(LIST_SHELLS)); \
+> status=$$?; \
+> if [ $$status -ne 0 ]; then \
+>     exit $$status; \
+> fi; \
+> if [ "$$#" -gt 0 ]; then \
+>     $(SHFMT) -i 4 -ci -w "$$@"; \
+> else \
+>     printf 'No shell scripts detected.\n'; \
+> fi
+
+fmt-check:
+> SHFMT_BIN="$(SHFMT)" SKIP_STATIC_ANALYSIS=1 SKIP_SHELLCHECK=1 $(SHELL_QUALITY)
+
+lint:
+> SHFMT_BIN="$(SHFMT)" SHELLCHECK_BIN="$(SHELLCHECK)" SKIP_SHFMT=1 $(SHELL_QUALITY)
+
+test:
+> $(BATS) tests
+
+package: ipk
 
 ipk: $(IPK_PATH)
 

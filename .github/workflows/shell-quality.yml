@@ -37,9 +37,8 @@ jobs:
         shell: bash
         run: ./scripts/ci/install-shell-tools.sh
 
-      - name: Run shell quality checks
-        shell: bash
-        run: ./scripts/ci/check-shell-quality.sh
+      - name: Run quality checks via Makefile
+        run: make all
 
       - name: Upload ShellCheck report
         if: always()
