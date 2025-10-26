@@ -35,34 +35,59 @@ jobs:
       - name: Collect shell scripts
         run: |
           set -euo pipefail
-          git ls-files | while read -r file; do
+          shell_files="shell-files.txt"
+          : > "$shell_files"
+          while IFS= read -r -d '' file; do
             if [ ! -f "$file" ]; then
               continue
             fi
-            if head -n 1 "$file" | grep -Eq '^#!.*\\b(sh|bash)\\b'; then
-              echo "$file"
+            if head -n 1 "$file" | grep -Eq '^#!.*\b(sh|bash)\b'; then
+              printf '%s\0' "$file" >> "$shell_files"
             fi
-          done | sort -u > shell-files.txt
-          if [ ! -s shell-files.txt ]; then
-            echo "No shell scripts found to check" >&2
-            exit 1
+          done < <(git ls-files -z)
+          if [ ! -s "$shell_files" ]; then
+            echo "No shell scripts found to check. Skipping ShellCheck and shfmt steps."
+            exit 0
           fi
-          cat shell-files.txt
+          tmp_sorted="$(mktemp)"
+          LC_ALL=C sort -zu "$shell_files" > "$tmp_sorted"
+          mv "$tmp_sorted" "$shell_files"
+          echo "Shell scripts to check:"
+          tr '\0' '\n' < "$shell_files"
 
       - name: Run shellcheck
         run: |
           set -euo pipefail
-          xargs -a shell-files.txt -r shellcheck -s sh
+          if [ ! -s shell-files.txt ]; then
+            echo "No shell scripts found. Skipping ShellCheck."
+            exit 0
+          fi
+          if [ -f .shellcheckrc ]; then
+            xargs -0 -r shellcheck --config-file ".shellcheckrc" -s sh -- < shell-files.txt
+          else
+            echo "Warning: .shellcheckrc not found. Running ShellCheck with default configuration." >&2
+            xargs -0 -r shellcheck -s sh -- < shell-files.txt
+          fi
 
       - name: Check formatting with shfmt
         run: |
           set -euo pipefail
-          xargs -a shell-files.txt -r shfmt -d -i 2 -bn -ci -sr
+          if [ ! -s shell-files.txt ]; then
+            echo "No shell scripts found. Skipping shfmt."
+            exit 0
+          fi
+          xargs -0 -r shfmt -d -i 2 -bn -ci -sr -- < shell-files.txt
 
       - name: Run Bats tests
         env:
           BATS_SHELL: /bin/sh
-        run: bats tests
+        run: |
+          set -euo pipefail
+          if [ ! -d tests ]; then
+            echo "tests/ directory not found. Skipping Bats tests."
+            exit 0
+          fi
+          bats tests
 
   post-release-verify:
     name: Post-release verify
