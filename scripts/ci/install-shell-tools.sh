@@ -23,10 +23,9 @@ if [ -f "$VERSION_FILE" ]; then
 fi
 
 if [ "$CURRENT_SIGNATURE" != "$EXPECTED_SIGNATURE" ]; then
-    if [ -e "$BIN_DIR" ] || [ -d "$TOOLS_ROOT/libexec" ] || [ -d "$TOOLS_ROOT/share" ]; then
-        printf 'Cached tool versions are incompatible. Clearing tool cache.\n'
-        rm -rf "$BIN_DIR" "$TOOLS_ROOT/libexec" "$TOOLS_ROOT/share"
-    fi
+    printf 'Cached tool versions are incompatible. Clearing tool cache.\n'
+    rm -rf "$BIN_DIR"
+    rm -rf "$TOOLS_ROOT"/bats-core-v*
 fi
 
 mkdir -p "$BIN_DIR"
@@ -121,33 +120,38 @@ ensure_bats() {
     if [ -x "$bats_bin" ]; then
         installed_version=$("$bats_bin" --version 2>/dev/null | awk '{print $2; exit}')
         if [ "$installed_version" = "$BATS_VERSION" ]; then
-            printf 'Using cached Bats %s.\n' "$installed_version"
+            printf 'Using cached bats-core %s.\n' "$installed_version"
             return
         fi
 
-        printf 'Bats %s found but %s required. Reinstalling.\n' "${installed_version:-unknown}" "$BATS_VERSION"
+        printf 'bats %s found but %s required. Reinstalling.\n' "${installed_version:-unknown}" "$BATS_VERSION"
         rm -f "$bats_bin"
-        rm -rf "$TOOLS_ROOT/libexec/bats-core" "$TOOLS_ROOT/share/doc/bats"
     fi
 
     tmp_dir=$(mktemp -d)
     TMP_DIRS="$TMP_DIRS $tmp_dir"
 
-    archive_path="$tmp_dir/bats.tar.gz"
+    archive_path="$tmp_dir/bats-core.tar.gz"
     archive_url="https://github.com/bats-core/bats-core/archive/refs/tags/v${BATS_VERSION}.tar.gz"
 
-    printf 'Downloading Bats %s...\n' "$BATS_VERSION"
+    printf 'Downloading bats-core %s...\n' "$BATS_VERSION"
     curl -fsSL "$archive_url" -o "$archive_path"
     echo "${BATS_SHA256}  ${archive_path}" | sha256sum -c -
 
     tar -xf "$archive_path" -C "$tmp_dir"
-    bats_src="$tmp_dir/bats-core-${BATS_VERSION}"
-    "$bats_src/install.sh" "$TOOLS_ROOT"
+    extract_dir="$tmp_dir/bats-core-${BATS_VERSION}"
+    install_root="$TOOLS_ROOT/bats-core-v${BATS_VERSION}"
+    rm -rf "$install_root"
+    mv "$extract_dir" "$install_root"
 
-    rm -rf "$bats_src"
-    rm -f "$archive_path"
+    cat >"$bats_bin" <<EOF
+#!/bin/sh
+exec "$install_root/bin/bats" "\$@"
+EOF
+    chmod +x "$bats_bin"
+
     rm -rf "$tmp_dir"
-    printf 'Bats %s installed.\n' "$BATS_VERSION"
+    printf 'bats-core %s installed.\n' "$BATS_VERSION"
 }
 
 ensure_shellcheck

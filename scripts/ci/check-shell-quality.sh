@@ -3,12 +3,6 @@
 
 set -eu
 
-SKIP_STATIC_ANALYSIS=${SKIP_STATIC_ANALYSIS:-0}
-SKIP_SHFMT=${SKIP_SHFMT:-0}
-SKIP_SHELLCHECK=${SKIP_SHELLCHECK:-0}
-SHFMT_BIN=${SHFMT_BIN:-shfmt}
-SHELLCHECK_BIN=${SHELLCHECK_BIN:-shellcheck}
-
 if ! command -v git >/dev/null 2>&1; then
     printf 'git is required to run shell quality checks.\n' >&2
     exit 127
@@ -31,72 +25,83 @@ SHELLCHECK_REPORT="$REPORT_DIR/shellcheck.txt"
 rm -f "$SHELL_FILES_LIST" "$SHEBANG_REPORT" "$EVAL_REPORT" "$UNQUOTED_REPORT" \
     "$SHFMT_REPORT" "$SHELLCHECK_JSON" "$SHELLCHECK_REPORT"
 
-LIST_SCRIPT="$REPO_ROOT/scripts/ci/list-shell-files.sh"
-if [ ! -x "$LIST_SCRIPT" ]; then
-    printf 'Shell file listing helper not found: %s\n' "$LIST_SCRIPT" >&2
-    exit 1
-fi
+list_shell_files() {
+    git ls-files | while IFS= read -r path; do
+        if [ ! -f "$path" ]; then
+            continue
+        fi
 
-if ! "$LIST_SCRIPT" >"$SHELL_FILES_LIST"; then
-    printf 'Failed to list shell scripts.\n' >&2
-    exit 1
-fi
+        case "$path" in
+            */.git/*)
+                continue
+                ;;
+        esac
+
+        if [ -x "$path" ]; then
+            printf '%s\n' "$path"
+            continue
+        fi
+
+        case "$path" in
+            *.sh)
+                printf '%s\n' "$path"
+                ;;
+        esac
+    done
+}
+
+list_shell_files | sort -u >"$SHELL_FILES_LIST"
 
 if [ ! -s "$SHELL_FILES_LIST" ]; then
     printf 'No shell scripts detected. Nothing to check.\n'
     exit 0
 fi
 
-SHEBANG_ERRORS=0
-EVAL_ERRORS=0
+while IFS= read -r path; do
+    first_line=$(sed -n '1p' "$path" 2>/dev/null || printf '')
+    case "$first_line" in
+        '#!/bin/sh' | '#!/usr/bin/env sh') ;;
+        '#!'*)
+            {
+                printf '%s: unexpected shebang: %s\n' "$path" "$first_line"
+            } >>"$SHEBANG_REPORT"
+            ;;
+        '')
+            {
+                printf '%s: missing shebang\n' "$path"
+            } >>"$SHEBANG_REPORT"
+            ;;
+        *)
+            {
+                printf '%s: missing shebang\n' "$path"
+            } >>"$SHEBANG_REPORT"
+            ;;
+    esac
 
-if [ "$SKIP_STATIC_ANALYSIS" -eq 0 ]; then
-    while IFS= read -r path; do
-        first_line=$(sed -n '1p' "$path" 2>/dev/null || printf '')
-        case "$first_line" in
-            '#!/bin/sh' | '#!/usr/bin/env sh') ;;
-            '#!'*)
-                {
-                    printf '%s: unexpected shebang: %s\n' "$path" "$first_line"
-                } >>"$SHEBANG_REPORT"
-                ;;
-            '')
-                {
-                    printf '%s: missing shebang\n' "$path"
-                } >>"$SHEBANG_REPORT"
-                ;;
-            *)
-                {
-                    printf '%s: missing shebang\n' "$path"
-                } >>"$SHEBANG_REPORT"
-                ;;
-        esac
-
-        awk '
-            /\beval\b/ {
-                line = $0
-                sub(/^[[:space:]]+/, "", line)
-                if (line ~ /^#/) {
-                    next
-                }
-                printf "%s:%d: %s\n", FILENAME, NR, $0
+    awk '
+        /\beval\b/ {
+            line = $0
+            sub(/^[[:space:]]+/, "", line)
+            if (line ~ /^#/) {
+                next
             }
-        ' "$path" >>"$EVAL_REPORT"
-    done <"$SHELL_FILES_LIST"
+            printf "%s:%d: %s\n", FILENAME, NR, $0
+        }
+    ' "$path" >>"$EVAL_REPORT"
+done <"$SHELL_FILES_LIST"
 
-    if [ -s "$SHEBANG_REPORT" ]; then
-        SHEBANG_ERRORS=1
-    else
-        rm -f "$SHEBANG_REPORT"
-    fi
-
-    if [ -s "$EVAL_REPORT" ]; then
-        EVAL_ERRORS=1
-    else
-        rm -f "$EVAL_REPORT"
-    fi
+SHEBANG_ERRORS=0
+if [ -s "$SHEBANG_REPORT" ]; then
+    SHEBANG_ERRORS=1
 else
-    rm -f "$SHEBANG_REPORT" "$EVAL_REPORT"
+    rm -f "$SHEBANG_REPORT"
+fi
+
+EVAL_ERRORS=0
+if [ -s "$EVAL_REPORT" ]; then
+    EVAL_ERRORS=1
+else
+    rm -f "$EVAL_REPORT"
 fi
 
 set --
@@ -105,30 +110,24 @@ while IFS= read -r path; do
 done <"$SHELL_FILES_LIST"
 
 SHFMT_STATUS=0
-if [ "$SKIP_SHFMT" -eq 0 ] && [ "$#" -gt 0 ]; then
-    shfmt_status=0
-    "$SHFMT_BIN" -i 4 -ci -d "$@" >"$SHFMT_REPORT" || shfmt_status=$?
-    if [ "$shfmt_status" -ne 0 ]; then
-        SHFMT_STATUS=$shfmt_status
+if [ "$#" -gt 0 ]; then
+    if ! shfmt -i 4 -ci -d "$@" >"$SHFMT_REPORT"; then
+        SHFMT_STATUS=$?
     fi
     if [ -s "$SHFMT_REPORT" ]; then
         SHFMT_STATUS=1
     else
         rm -f "$SHFMT_REPORT"
     fi
-else
-    rm -f "$SHFMT_REPORT"
 fi
 
 SHELLCHECK_STATUS=0
-if [ "$SKIP_SHELLCHECK" -eq 0 ] && [ "$#" -gt 0 ]; then
-    if "$SHELLCHECK_BIN" --severity=warning --format=json "$@" >"$SHELLCHECK_JSON"; then
+if [ "$#" -gt 0 ]; then
+    if shellcheck --severity=warning --format=json "$@" >"$SHELLCHECK_JSON"; then
         SHELLCHECK_STATUS=0
     else
         SHELLCHECK_STATUS=$?
     fi
-else
-    rm -f "$SHELLCHECK_JSON"
 fi
 
 if [ -f "$SHELLCHECK_JSON" ] && jq -e 'length > 0' "$SHELLCHECK_JSON" >/dev/null 2>&1; then
@@ -154,24 +153,23 @@ else
 fi
 
 BATS_STATUS=0
-BATS_FILES=$(find tests -name '*.bats' -type f 2>/dev/null | sort)
-if [ -n "$BATS_FILES" ]; then
-    if command -v bats >/dev/null 2>&1; then
-        set --
-        while IFS= read -r path; do
-            set -- "$@" "$path"
-        done <<EOF
-$BATS_FILES
-EOF
-
-        if [ "$#" -gt 0 ]; then
-            if ! bats --print-output-on-failure --timing "$@"; then
+BATS_SAMPLE=''
+if command -v bats >/dev/null 2>&1; then
+    if [ -d "$REPO_ROOT/tests" ]; then
+        BATS_SAMPLE=$(find "$REPO_ROOT/tests" -name '*.bats' -print -quit 2>/dev/null || printf '')
+        if [ -n "$BATS_SAMPLE" ]; then
+            printf '\nRunning bats tests...\n'
+            if ! BATS_LIB_PATH="$REPO_ROOT/tests/lib" bats --print-output-on-failure --timing "$REPO_ROOT/tests"; then
                 BATS_STATUS=$?
             fi
         fi
-    else
-        printf 'bats executable not found, unable to run .bats tests.\n' >&2
-        BATS_STATUS=1
+    fi
+else
+    if [ -d "$REPO_ROOT/tests" ]; then
+        BATS_SAMPLE=$(find "$REPO_ROOT/tests" -name '*.bats' -print -quit 2>/dev/null || printf '')
+        if [ -n "$BATS_SAMPLE" ]; then
+            printf 'bats command not found; skipping bats tests.\n' >&2
+        fi
     fi
 fi
 

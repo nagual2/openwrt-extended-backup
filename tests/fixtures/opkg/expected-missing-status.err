@@ -1,0 +1,1 @@
+user_installed_packages: Не удалось прочитать status-файл: ${STATUS_FILE}

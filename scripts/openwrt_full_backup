@@ -83,6 +83,7 @@ unset DRY_RUN_VALUE
 KSMBD_SHARE_NAME='owrt_archive'
 KSMBD_USER='owrt_backup'
 KSMBD_PASSWORD=''
+KSMBD_INIT_SCRIPT=${KSMBD_INIT_SCRIPT:-/etc/init.d/ksmbd}
 KSMBD_SHARE_CREATED=0
 KSMBD_SHARE_EXISTED=0
 
@@ -569,7 +570,7 @@ setup_smb_export() {
 
     KSMBD_SHARE_CREATED=1
 
-    if ! /etc/init.d/ksmbd restart >/dev/null 2>&1; then
+    if ! "$KSMBD_INIT_SCRIPT" restart >/dev/null 2>&1; then
         fatal 'Не удалось перезапустить службу ksmbd' "$EX_SOFTWARE"
     fi
 
