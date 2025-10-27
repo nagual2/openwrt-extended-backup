@@ -64,14 +64,25 @@ jobs:
             exit 0
           fi
           log="${CI_DEBUG_DIR}/shellcheck.log"
-          if [ -f .shellcheckrc ]; then
-            xargs -0 -r tools/shellcheck --config-file ".shellcheckrc" -s sh -- < shell-files.txt 2>&1 | tee "$log"
-          else
-            {
-              echo "Warning: .shellcheckrc not found. Running ShellCheck with default configuration." >&2
-              xargs -0 -r tools/shellcheck -s sh -- < shell-files.txt
-            } 2>&1 | tee "$log"
+          sc="tools/shellcheck"
+          if [ ! -x "$sc" ]; then
+            sc="shellcheck"
           fi
+          rc_arg=()
+          if [ -f .shellcheckrc ]; then
+            if "$sc" --help 2>&1 | grep -q -- "--rcfile"; then
+              rc_arg=(--rcfile=.shellcheckrc)
+            else
+              rc_arg=(--norc)
+              echo "Note: ShellCheck without --rcfile; running with defaults" >&2
+            fi
+          else
+            echo "Note: .shellcheckrc not found; running with defaults" >&2
+            if "$sc" --help 2>&1 | grep -q -- "--norc"; then
+              rc_arg=(--norc)
+            fi
+          fi
+          xargs -0 -r "$sc" -s sh "${rc_arg[@]}" -- < shell-files.txt 2>&1 | tee "$log"
 
       - name: Check formatting with shfmt
         shell: bash
