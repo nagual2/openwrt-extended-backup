@@ -6,11 +6,26 @@ Tagged releases are published via GitHub Actions and update this changelog along
 
 ## [Unreleased]
 
+_No changes yet._
+
+## [0.2.0](https://github.com/nagual2/openwrt-extended-backup/compare/v0.1.0...v0.2.0) - 2025-10-27
+
+### Added
+
+- Introduced the `openwrt_restore` CLI to safely validate, snapshot, and restore overlay backups alongside optional package reinstallation.
+- Added remote upload helpers to `openwrt_full_backup`, including generated `scp` commands and optional ksmbd-powered SMB export for off-device storage.
+- Delivered reproducible release packaging, shipping focused tar/zip artifacts and an OpenWrt `.ipk` build via `make ipk`.
+
 ### Changed
 
-- Finalise the post-refactor layout: runtime scripts now live in `scripts/`, `openwrt_full_restore` is a thin launcher for the new `openwrt_restore` CLI, and release artifacts only contain the runtime files plus documentation.
-- Refresh README guidance to match the streamlined CLI and surface build targets for contributors.
-- Keep previous refactor notes: the backup CLI focuses on core flags with safer tar usage, and `user_installed_packages` adds opkg fallbacks, stricter filtering, and output file support.
+- Finalised the post-refactor layout: runtime scripts now live in `scripts/`, `openwrt_full_restore` remains as a compatibility launcher, and release artifacts include only runtime files plus documentation.
+- Refreshed the README and contributor docs to highlight the streamlined CLI along with formatting, linting, and test targets.
+- Expanded the Bats-based test suite and fixtures to improve coverage across backup, restore, and package listing workflows.
+- Iterated on CI workflows for formatting, linting, and packaging checks; stabilisation continues in follow-up work.
+
+### Known Issues
+
+- CI is being stabilized in upcoming patches and may intermittently fail.
 
 ## [0.8.3](https://github.com/nagual2/openwrt-extended-backup/compare/v0.8.2...v0.8.3) (2025-10-24)
 
