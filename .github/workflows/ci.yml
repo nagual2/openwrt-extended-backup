@@ -30,6 +30,14 @@ jobs:
           echo "${GITHUB_WORKSPACE}/tools" >> "$GITHUB_PATH"
           echo "${GITHUB_WORKSPACE}/tools/bats-core/bin" >> "$GITHUB_PATH"
 
+      - name: Print vendored tool versions
+        shell: bash
+        run: |
+          set -euo pipefail
+          tools/shellcheck -V || shellcheck -V
+          tools/shfmt -version || shfmt -version
+          tools/bats-core/bin/bats -v || bats -v
+
       - name: Discover shell scripts
         shell: bash
         run: |
