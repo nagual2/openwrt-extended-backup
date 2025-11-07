@@ -1,0 +1,431 @@
+{
+  "tool": "custom_regex_scan",
+  "patterns": [
+    {
+      "name": "AWS Access Key ID",
+      "description": "Potential AWS Access Key ID",
+      "severity": "HIGH",
+      "pattern": "AKIA[0-9A-Z]{16}"
+    },
+    {
+      "name": "AWS Secret Key",
+      "description": "Potential AWS Secret Access Key",
+      "severity": "CRITICAL",
+      "pattern": "aws(.{0,20})?(secret|access)?(.{0,20})?(key|token)\\s*[:=]\\s*['\\\"]?[0-9a-zA-Z/+]{40}['\\\"]?"
+    },
+    {
+      "name": "GitHub Token",
+      "description": "Potential GitHub personal access token",
+      "severity": "HIGH",
+      "pattern": "gh[pousr]_[0-9a-zA-Z]{36}"
+    },
+    {
+      "name": "Generic API Key",
+      "description": "Generic API key pattern",
+      "severity": "HIGH",
+      "pattern": "(api|token|secret|key)[-_]?(id|key|token|secret)?\\s*[:=]\\s*['\\\"]?[0-9a-zA-Z]{16,45}['\\\"]?"
+    },
+    {
+      "name": "Database Connection String",
+      "description": "Potential database connection string",
+      "severity": "HIGH",
+      "pattern": "(postgres|mysql|mongodb|redis|mssql|oracle):/{2}[^\\s@]+:[^\\s@]+@"
+    },
+    {
+      "name": "SSH Private Key Block",
+      "description": "Private key header",
+      "severity": "CRITICAL",
+      "pattern": "-----BEGIN (?:RSA|DSA|EC|OPENSSH) PRIVATE KEY-----"
+    },
+    {
+      "name": "TLS Certificate Block",
+      "description": "TLS certificate PEM header",
+      "severity": "HIGH",
+      "pattern": "-----BEGIN CERTIFICATE-----"
+    },
+    {
+      "name": "Email Address",
+      "description": "Possible email address (PII)",
+      "severity": "LOW",
+      "pattern": "[A-Z0-9._%+-]+@[A-Z0-9.-]+\\.[A-Z]{2,}"
+    },
+    {
+      "name": "Phone Number",
+      "description": "Possible phone number (PII)",
+      "severity": "LOW",
+      "pattern": "(?:(?:\\+?\\d{1,3})?[\\s-]?)?(?:\\(\\d{3}\\)|\\d{3})[\\s-]?\\d{3}[\\s-]?\\d{4}"
+    },
+    {
+      "name": "IPv4 Address",
+      "description": "Possible IPv4 address",
+      "severity": "LOW",
+      "pattern": "\\b(?:(?:25[0-5]|2[0-4]\\d|[01]?\\d\\d?)\\.){3}(?:25[0-5]|2[0-4]\\d|[01]?\\d\\d?)\\b"
+    },
+    {
+      "name": "Internal URL",
+      "description": "Possible internal network URL",
+      "severity": "MEDIUM",
+      "pattern": "https?://(?:(?:10|127|192\\.168|172\\.(?:1[6-9]|2\\d|3[01]))(?:\\.\\d{1,3}){2}|localhost)[^\\s]*"
+    },
+    {
+      "name": "Commented Credential",
+      "description": "Credential-like value within comment",
+      "severity": "MEDIUM",
+      "pattern": "#\\s*(?:password|passwd|pwd|secret)\\s*[:=]\\s*[^\\s]+"
+    }
+  ],
+  "findings": [
+    {
+      "file": "tests/openwrt_full_backup.bats",
+      "line": 230,
+      "pattern": "IPv4 Address",
+      "severity": "LOW",
+      "description": "Possible IPv4 address",
+      "line_preview": "export MOCK_IP_OUTPUT=$'2: br-lan    inet 192.168.50.1/24 brd 192.168.50.255 scope global br-lan\\n'"
+    },
+    {
+      "file": "tests/openwrt_full_backup.bats",
+      "line": 258,
+      "pattern": "IPv4 Address",
+      "severity": "LOW",
+      "description": "Possible IPv4 address",
+      "line_preview": "assert_output_contains \"${run_output}\" \"SMB-\u0448\u0430\u0440\u0430 \u0434\u043e\u0441\u0442\u0443\u043f\u043d\u0430 \u043f\u043e \u0430\u0434\u0440\u0435\u0441\u0443 \\\\192.168.50.1\\\\owrt_archive\" \"${shell_label}\""
+    },
+    {
+      "file": "tests/fixtures/opkg/status.none.sample",
+      "line": 4,
+      "pattern": "Phone Number",
+      "severity": "LOW",
+      "description": "Possible phone number (PII)",
+      "line_preview": "Installed-Time: 1700000000"
+    },
+    {
+      "file": "tests/fixtures/opkg/status.none.sample",
+      "line": 9,
+      "pattern": "Phone Number",
+      "severity": "LOW",
+      "description": "Possible phone number (PII)",
+      "line_preview": "Installed-Time: 1700000000"
+    },
+    {
+      "file": "tests/fixtures/opkg/status.none.sample",
+      "line": 15,
+      "pattern": "Phone Number",
+      "severity": "LOW",
+      "description": "Possible phone number (PII)",
+      "line_preview": "Installed-Time: 1700000000"
+    },
+    {
+      "file": "tests/fixtures/opkg/status.sample",
+      "line": 8,
+      "pattern": "Phone Number",
+      "severity": "LOW",
+      "description": "Possible phone number (PII)",
+      "line_preview": "Installed-Time: 1711145382"
+    },
+    {
+      "file": "tests/fixtures/opkg/status.sample",
+      "line": 16,
+      "pattern": "Phone Number",
+      "severity": "LOW",
+      "description": "Possible phone number (PII)",
+      "line_preview": "Installed-Time: 1711145382"
+    },
+    {
+      "file": "tests/fixtures/opkg/status.sample",
+      "line": 25,
+      "pattern": "Phone Number",
+      "severity": "LOW",
+      "description": "Possible phone number (PII)",
+      "line_preview": "Installed-Time: 1711145382"
+    },
+    {
+      "file": "tests/fixtures/opkg/status.sample",
+      "line": 31,
+      "pattern": "Phone Number",
+      "severity": "LOW",
+      "description": "Possible phone number (PII)",
+      "line_preview": "Installed-Time: 1711145382"
+    },
+    {
+      "file": "tests/fixtures/opkg/status.sample",
+      "line": 39,
+      "pattern": "Phone Number",
+      "severity": "LOW",
+      "description": "Possible phone number (PII)",
+      "line_preview": "Installed-Time: 1712600400"
+    },
+    {
+      "file": "tests/fixtures/opkg/status.sample",
+      "line": 47,
+      "pattern": "Phone Number",
+      "severity": "LOW",
+      "description": "Possible phone number (PII)",
+      "line_preview": "Installed-Time: 1712600400"
+    },
+    {
+      "file": "tests/fixtures/opkg/status.sample",
+      "line": 54,
+      "pattern": "Phone Number",
+      "severity": "LOW",
+      "description": "Possible phone number (PII)",
+      "line_preview": "Installed-Time: 1713001200"
+    },
+    {
+      "file": "tests/fixtures/opkg/status.sample",
+      "line": 61,
+      "pattern": "Phone Number",
+      "severity": "LOW",
+      "description": "Possible phone number (PII)",
+      "line_preview": "Installed-Time: 1713001300"
+    },
+    {
+      "file": "tests/fixtures/opkg/status.sample",
+      "line": 68,
+      "pattern": "Phone Number",
+      "severity": "LOW",
+      "description": "Possible phone number (PII)",
+      "line_preview": "Installed-Time: 1713010000"
+    },
+    {
+      "file": "tests/fixtures/opkg/status.sample",
+      "line": 76,
+      "pattern": "Phone Number",
+      "severity": "LOW",
+      "description": "Possible phone number (PII)",
+      "line_preview": "Installed-Time: 1713010000"
+    },
+    {
+      "file": "tests/fixtures/opkg/status.complex",
+      "line": 5,
+      "pattern": "Phone Number",
+      "severity": "LOW",
+      "description": "Possible phone number (PII)",
+      "line_preview": "Installed-Time: 1710000000"
+    },
+    {
+      "file": "tests/fixtures/opkg/status.complex",
+      "line": 14,
+      "pattern": "Phone Number",
+      "severity": "LOW",
+      "description": "Possible phone number (PII)",
+      "line_preview": "Installed-Time: 1710100000"
+    },
+    {
+      "file": "tests/fixtures/opkg/status.complex",
+      "line": 25,
+      "pattern": "Phone Number",
+      "severity": "LOW",
+      "description": "Possible phone number (PII)",
+      "line_preview": "Installed-Time: 1710200000"
+    },
+    {
+      "file": "tests/fixtures/opkg/status.complex",
+      "line": 33,
+      "pattern": "Phone Number",
+      "severity": "LOW",
+      "description": "Possible phone number (PII)",
+      "line_preview": "Installed-Time: 1710300000"
+    },
+    {
+      "file": "tests/fixtures/opkg/status.complex",
+      "line": 41,
+      "pattern": "Phone Number",
+      "severity": "LOW",
+      "description": "Possible phone number (PII)",
+      "line_preview": "Installed-Time: 1710400000"
+    },
+    {
+      "file": "tests/fixtures/opkg/status.complex",
+      "line": 49,
+      "pattern": "Phone Number",
+      "severity": "LOW",
+      "description": "Possible phone number (PII)",
+      "line_preview": "Installed-Time: 1710000000"
+    },
+    {
+      "file": "tests/fixtures/opkg/status.special.sample",
+      "line": 5,
+      "pattern": "Phone Number",
+      "severity": "LOW",
+      "description": "Possible phone number (PII)",
+      "line_preview": "Installed-Time: 1700000001"
+    },
+    {
+      "file": "tests/fixtures/opkg/status.special.sample",
+      "line": 10,
+      "pattern": "Phone Number",
+      "severity": "LOW",
+      "description": "Possible phone number (PII)",
+      "line_preview": "Installed-Time: 1700000002"
+    },
+    {
+      "file": "tests/fixtures/opkg/status.special.sample",
+      "line": 15,
+      "pattern": "Phone Number",
+      "severity": "LOW",
+      "description": "Possible phone number (PII)",
+      "line_preview": "Installed-Time: 1700000003"
+    },
+    {
+      "file": "tests/fixtures/opkg/status.special.sample",
+      "line": 20,
+      "pattern": "Phone Number",
+      "severity": "LOW",
+      "description": "Possible phone number (PII)",
+      "line_preview": "Installed-Time: 1700000005"
+    },
+    {
+      "file": "tests/fixtures/opkg/status.special.sample",
+      "line": 25,
+      "pattern": "Phone Number",
+      "severity": "LOW",
+      "description": "Possible phone number (PII)",
+      "line_preview": "Installed-Time: 1700000000"
+    },
+    {
+      "file": "tests/fixtures/opkg/status.special.sample",
+      "line": 31,
+      "pattern": "Phone Number",
+      "severity": "LOW",
+      "description": "Possible phone number (PII)",
+      "line_preview": "Installed-Time: 1700000004"
+    },
+    {
+      "file": "tools/bats-core/package.json",
+      "line": 7,
+      "pattern": "Email Address",
+      "severity": "LOW",
+      "description": "Possible email address (PII)",
+      "line_preview": "\"author\": \"Sam Stephenson <sstephenson@gmail.com> (http://sstephenson.us/)\","
+    },
+    {
+      "file": "tools/bats-core/AUTHORS",
+      "line": 2,
+      "pattern": "Email Address",
+      "severity": "LOW",
+      "description": "Possible email address (PII)",
+      "line_preview": "Bianca Tamayo <hi@biancatamayo.me> (https://biancatamayo.me/)"
+    },
+    {
+      "file": "tools/bats-core/AUTHORS",
+      "line": 3,
+      "pattern": "Email Address",
+      "severity": "LOW",
+      "description": "Possible email address (PII)",
+      "line_preview": "Jason Karns <jason.karns@gmail.com> (http://jasonkarns.com/)"
+    },
+    {
+      "file": "tools/bats-core/AUTHORS",
+      "line": 4,
+      "pattern": "Email Address",
+      "severity": "LOW",
+      "description": "Possible email address (PII)",
+      "line_preview": "Mike Bland <mbland@acm.org> (https://mike-bland.com/)"
+    },
+    {
+      "file": "tools/bats-core/docs/CODE_OF_CONDUCT.md",
+      "line": 79,
+      "pattern": "Email Address",
+      "severity": "LOW",
+      "description": "Possible email address (PII)",
+      "line_preview": "* Sam Stephenson <<sstephenson@gmail.com>> (Original author)"
+    },
+    {
+      "file": "tools/bats-core/docs/releasing.md",
+      "line": 87,
+      "pattern": "Phone Number",
+      "severity": "LOW",
+      "description": "Possible phone number (PII)",
+      "line_preview": "SHA256(v1.1.0.tar.gz)=855d8b8bed466bc505e61123d12885500ef6fcdb317ace1b668087364717ea82"
+    },
+    {
+      "file": "tools/bats-core/docs/releasing.md",
+      "line": 92,
+      "pattern": "Phone Number",
+      "severity": "LOW",
+      "description": "Possible phone number (PII)",
+      "line_preview": "--sha256=855d8b8bed466bc505e61123d12885500ef6fcdb317ace1b668087364717ea82"
+    },
+    {
+      "file": "tools/bats-core/docs/releasing.md",
+      "line": 104,
+      "pattern": "Phone Number",
+      "severity": "LOW",
+      "description": "Possible phone number (PII)",
+      "line_preview": "SHA512(v1.1.0.zip)=accd83cfec0025a2be40982b3f9a314c2bbf72f5c85daffa9e9419611904a8d34e376919a5d53e378382e0f3794d2bd781046d810225e2a77812474e427bed9e"
+    },
+    {
+      "file": "tools/bats-core/bin/bats",
+      "line": 57,
+      "pattern": "Phone Number",
+      "severity": "LOW",
+      "description": "Possible phone number (PII)",
+      "line_preview": "# https://pubs.opengroup.org/onlinepubs/9699919799/utilities/ls.html"
+    },
+    {
+      "file": "tools/bats-core/.github/workflows/tests.yml",
+      "line": 289,
+      "pattern": "Phone Number",
+      "severity": "LOW",
+      "description": "Possible phone number (PII)",
+      "line_preview": "- uses: docker/build-push-action@471d1dc4e07e5cdedd4c2171150001c434f0b7a4 # v6.15.0"
+    },
+    {
+      "file": "tools/bats-core/.github/workflows/release_dockerhub.yml",
+      "line": 43,
+      "pattern": "Phone Number",
+      "severity": "LOW",
+      "description": "Possible phone number (PII)",
+      "line_preview": "- uses: docker/build-push-action@471d1dc4e07e5cdedd4c2171150001c434f0b7a4 # v6.15.0"
+    },
+    {
+      "file": "tools/bats-core/.github/workflows/release_dockerhub.yml",
+      "line": 49,
+      "pattern": "Phone Number",
+      "severity": "LOW",
+      "description": "Possible phone number (PII)",
+      "line_preview": "- uses: docker/build-push-action@471d1dc4e07e5cdedd4c2171150001c434f0b7a4 # v6.15.0"
+    },
+    {
+      "file": "tools/bats-core/contrib/rpm/bats.spec",
+      "line": 52,
+      "pattern": "Email Address",
+      "severity": "LOW",
+      "description": "Possible email address (PII)",
+      "line_preview": "* Wed Sep 07 2022 Marcel Hecko <marcel@blava.net> - 1.2.0-1"
+    },
+    {
+      "file": "tools/bats-core/contrib/rpm/bats.spec",
+      "line": 55,
+      "pattern": "Email Address",
+      "severity": "LOW",
+      "description": "Possible email address (PII)",
+      "line_preview": "* Sun Jul 08 2018 mbland <mbland@acm.org> - 1.1.0-1"
+    },
+    {
+      "file": "tools/bats-core/contrib/rpm/bats.spec",
+      "line": 58,
+      "pattern": "Email Address",
+      "severity": "LOW",
+      "description": "Possible email address (PII)",
+      "line_preview": "* Mon Jun 18 2018 pixdrift <support@pixeldrift.net> - 1.0.2-1"
+    },
+    {
+      "file": "tools/bats-core/contrib/rpm/bats.spec",
+      "line": 62,
+      "pattern": "Email Address",
+      "severity": "LOW",
+      "description": "Possible email address (PII)",
+      "line_preview": "* Sat Jun 09 2018 pixdrift <support@pixeldrift.net> - 1.0.1-1"
+    },
+    {
+      "file": "tools/bats-core/contrib/rpm/bats.spec",
+      "line": 65,
+      "pattern": "Email Address",
+      "severity": "LOW",
+      "description": "Possible email address (PII)",
+      "line_preview": "* Fri Jun 08 2018 pixdrift <support@pixeldrift.net> - 1.0.0-1"
+    }
+  ]
+}

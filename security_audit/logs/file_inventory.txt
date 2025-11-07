@@ -1,0 +1,15 @@
+Pattern,Count
+*.md,22
+*.txt,10
+*.sh,8
+*.yml,10
+*.yaml,1
+Makefile,3
+*.json,3
+*.env,0
+*.conf,0
+*.config,0
+*.key,0
+*.pem,0
+*.crt,0
+.git/config,1

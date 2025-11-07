@@ -10,3 +10,6 @@
 build/
 dist/
 *.ipk
+
+# Security audit artifacts
+security_audit/.venv/
