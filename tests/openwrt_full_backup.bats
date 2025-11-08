@@ -226,7 +226,8 @@ teardown() {
     expected="$(expected_archive_path)"
     rm -f "${expected}"
 
-    export KSMBD_PASSWORD='Secret123'
+    local test_password="TestPass${RANDOM}"
+    export KSMBD_PASSWORD="${test_password}"
     export MOCK_IP_OUTPUT=$'2: br-lan    inet 192.168.50.1/24 brd 192.168.50.255 scope global br-lan\n'
     export MOCK_IP_EXIT_CODE=0
     export MOCK_HOSTNAME_VALUE='integration-router'
@@ -248,7 +249,7 @@ teardown() {
 
     [ -f "${expected}" ] || fail "[${shell_label}] expected archive at ${expected}"
 
-    assert_command_log_contains "ksmbd.adduser owrt_backup -p Secret123" "${shell_label}"
+    assert_command_log_contains "ksmbd.adduser owrt_backup -p ${test_password}" "${shell_label}"
     assert_command_log_contains "uci set ksmbd.@share[-1].path=${OUTPUT_DIR}" "${shell_label}"
     assert_command_log_contains "uci commit ksmbd" "${shell_label}"
     assert_command_log_contains "init.d/ksmbd restart" "${shell_label}"
@@ -258,7 +259,7 @@ teardown() {
     assert_output_contains "${run_output}" "SMB-шара доступна по адресу \\192.168.50.1\\owrt_archive" "${shell_label}"
     assert_output_contains "${run_output}" "SMB-шара доступна по имени \\integration-router\\owrt_archive" "${shell_label}"
     assert_output_contains "${run_output}" "Имя пользователя: owrt_backup" "${shell_label}"
-    assert_output_contains "${run_output}" "Пароль: Secret123" "${shell_label}"
+    assert_output_contains "${run_output}" "Пароль: ${test_password}" "${shell_label}"
 
     rm -rf "${OUTPUT_DIR}"
   done
@@ -318,7 +319,8 @@ teardown() {
     expected="$(expected_archive_path)"
     rm -f "${expected}"
 
-    export KSMBD_PASSWORD='Secret123'
+    local test_password="TestPass${RANDOM}"
+    export KSMBD_PASSWORD="${test_password}"
 
     MOCK_BACKUP_SHELL="${shell_path}"
     mock_run_backup --overlay "${OVERLAY_DIR}" --output "${OUTPUT_DIR}" --export=smb
@@ -333,7 +335,7 @@ teardown() {
     fi
 
     assert_output_contains "${run_output}" "Не удалось перезапустить службу ksmbd" "${shell_label}"
-    assert_command_log_contains "ksmbd.adduser owrt_backup -p Secret123" "${shell_label}"
+    assert_command_log_contains "ksmbd.adduser owrt_backup -p ${test_password}" "${shell_label}"
     assert_command_log_contains "init.d/ksmbd restart" "${shell_label}"
 
     local deluser_count
