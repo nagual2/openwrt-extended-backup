@@ -10,3 +10,18 @@
 build/
 dist/
 *.ipk
+
+# Environment variables and secrets
+.env
+.env.local
+.env.*.local
+.secrets/
+
+# IDE and editor settings
+.vscode/
+.idea/
+*.iml
+
+# System files
+.DS_Store
+Thumbs.db

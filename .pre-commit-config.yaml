@@ -1,0 +1,60 @@
+repos:
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.18.0
+    hooks:
+      - id: gitleaks
+        name: Detect secrets with gitleaks
+        entry: gitleaks protect --verbose --staged
+        language: system
+        stages: [commit]
+        pass_filenames: false
+
+  - repo: https://github.com/shellcheck-py/shellcheck-py
+    rev: v0.9.0.5
+    hooks:
+      - id: shellcheck
+        name: Shellcheck
+        types: [shell]
+        args: ['--format=gcc']
+
+  - repo: local
+    hooks:
+      - id: no-hardcoded-secrets
+        name: Check for hardcoded secrets
+        entry: bash -c 'if grep -r "Secret123\|password.*=.*['\''\"]\|KSMBD_PASSWORD.*=.*['\''\"0-9]" --include="*.sh" --include="*.bats" tests/ scripts/ 2>/dev/null | grep -v "test_password\|TEST_PASSWORD\|TEST_CREDENTIALS\|MOCK_" >/dev/null; then echo "ERROR: Potential hardcoded secrets found"; exit 1; fi'
+        language: system
+        stages: [commit]
+        pass_filenames: false
+
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.5.0
+    hooks:
+      - id: detect-private-key
+        name: Detect private keys
+      - id: check-added-large-files
+        name: Check for added large files
+        args: ['--maxkb=5120']
+      - id: trailing-whitespace
+        name: Trim trailing whitespace
+      - id: end-of-file-fixer
+        name: Fix end of file
+      - id: check-merge-conflict
+        name: Check for merge conflicts
+      - id: mixed-line-ending
+        name: Check for mixed line endings
+        args: ['--fix=lf']
+
+  - repo: https://github.com/gitpython-developers/gitpython
+    rev: 3.1.40
+    hooks:
+      - id: git-diff-head
+        name: Check for git conflicts
+        entry: git diff-index
+        language: system
+        pass_filenames: false
+        always_run: true
+
+# Configuration to ensure sensitive files are not committed
+# - Prevent .env files from being committed (use .gitignore)
+# - Detect common secret patterns in code
+# - Check for private keys
