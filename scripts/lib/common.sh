@@ -210,12 +210,14 @@ common_init() {
             printf '%s: unable to determine script directory\n' "$PROGRAM" >&2
             exit 1
         fi
+        # shellcheck disable=SC2034
         COMMON_SCRIPT_DIR=$SCRIPT_DIR
     fi
 
     if [ -z "${PROJECT_ROOT-}" ]; then
         PROJECT_ROOT=$(dirname "$SCRIPT_DIR")
     fi
+    # shellcheck disable=SC2034
     COMMON_PROJECT_ROOT=$PROJECT_ROOT
 
     version_file=$PROJECT_ROOT/VERSION
@@ -236,6 +238,7 @@ common_init() {
         computed_version=$version_fallback
     fi
 
+    # shellcheck disable=SC2034
     VERSION=$computed_version
     COMMON_VERSION=$computed_version
 }
