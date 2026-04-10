@@ -3,7 +3,7 @@ name: CI
 on: [push, pull_request]
 
 jobs:
-  build:
+  lint:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -12,8 +12,31 @@ jobs:
       - name: Install shellcheck
         run: sudo apt-get update && sudo apt-get install -y shellcheck
 
-      - name: Run shellcheck
-        run: shellcheck -s sh scripts/*.sh || true
+      - name: Run shellcheck on all scripts
+        run: |
+          shellcheck -s sh scripts/lib/common.sh
+          shellcheck -s sh scripts/openwrt_full_backup
+          shellcheck -s sh scripts/openwrt_restore
+          shellcheck -s sh scripts/openwrt_full_restore
+          shellcheck -s sh scripts/user_installed_packages
 
-      - name: Confirm minimal CI
-        run: echo "CI minimal check passed"
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Run Bats tests
+        run: |
+          make test
+
+  build-ipk:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Build IPK package
+        run: |
+          make ipk
+          ls -la dist/

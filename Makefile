@@ -90,15 +90,17 @@ test:
 
 ipk: $(IPK_PATH)
 
-$(IPK_PATH): scripts/openwrt_full_backup scripts/openwrt_restore scripts/openwrt_full_restore scripts/user_installed_packages
+$(IPK_PATH): scripts/openwrt_full_backup scripts/openwrt_restore scripts/openwrt_full_restore scripts/user_installed_packages scripts/lib/common.sh
 > rm -rf $(WORK_DIR)
 > mkdir -p $(DATA_DIR)/usr/bin
 > mkdir -p $(DATA_DIR)/usr/share/$(SHARE_DIR)
 > mkdir -p $(DATA_DIR)/usr/share/doc/$(PKG_NAME)
+> mkdir -p $(DATA_DIR)/usr/lib/openwrt-extended-backup
 > install -m 0755 scripts/openwrt_full_backup $(DATA_DIR)/usr/bin/openwrt_full_backup
 > install -m 0755 scripts/openwrt_restore $(DATA_DIR)/usr/bin/openwrt_restore
 > install -m 0755 scripts/openwrt_full_restore $(DATA_DIR)/usr/bin/openwrt_full_restore
 > install -m 0755 scripts/user_installed_packages $(DATA_DIR)/usr/bin/user_installed_packages
+> install -m 0644 scripts/lib/common.sh $(DATA_DIR)/usr/lib/openwrt-extended-backup/common.sh
 > printf '%s\n' "$(PKG_VERSION)" > $(DATA_DIR)/usr/share/$(SHARE_DIR)/VERSION
 > install -m 0644 README.md $(DATA_DIR)/usr/share/doc/$(PKG_NAME)/README.md
 > install -m 0644 LICENSE $(DATA_DIR)/usr/share/doc/$(PKG_NAME)/LICENSE

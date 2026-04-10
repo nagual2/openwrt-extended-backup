@@ -23,7 +23,14 @@ if ! SCRIPT_DIR=$(cd "$SCRIPT_SOURCE" 2>/dev/null && pwd); then
 fi
 
 # shellcheck source=lib/common.sh
-. "$SCRIPT_DIR/lib/common.sh"
+if [ -f "$SCRIPT_DIR/lib/common.sh" ]; then
+    . "$SCRIPT_DIR/lib/common.sh"
+elif [ -f /usr/lib/openwrt-extended-backup/common.sh ]; then
+    . /usr/lib/openwrt-extended-backup/common.sh
+else
+    printf '%s: common.sh not found\n' "$(basename "$0")" >&2
+    exit 1
+fi
 
 common_init "$0"
 
@@ -315,10 +322,7 @@ create_archive() {
     REMOVE_ARCHIVE_ON_FAILURE=1
     if ! (
         cd "$overlay_parent" 2>/dev/null &&
-            tar -czpf "$ARCHIVE_PATH" \
-                --numeric-owner \
-                --preserve-permissions \
-                --same-owner \
+            tar -czf "$ARCHIVE_PATH" \
                 -X "$TAR_EXCLUDE_FILE" \
                 "$overlay_name"
     ); then

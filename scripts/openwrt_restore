@@ -1,9 +1,6 @@
 #!/bin/sh
 # shellcheck shell=sh
 
-set -eu
-
-PROGRAM=$(basename "$0")
 SCRIPT_PATH=$0
 
 case "$SCRIPT_PATH" in
@@ -21,53 +18,21 @@ case "$SCRIPT_PATH" in
 esac
 
 if ! SCRIPT_DIR=$(cd "$SCRIPT_SOURCE" 2>/dev/null && pwd); then
-    printf '%s: не удалось определить каталог скрипта\n' "$PROGRAM" >&2
+    printf '%s: unable to determine script directory\n' "$(basename "$0")" >&2
     exit 1
 fi
-PROJECT_ROOT=$(dirname "$SCRIPT_DIR")
-VERSION_FILE="${PROJECT_ROOT}/VERSION"
-SHARE_VERSION_FILE='/usr/share/openwrt-extended-backup/VERSION'
-CHANGELOG_FILE="${PROJECT_ROOT}/CHANGELOG.md"
-VERSION_FALLBACK='0.0.0'
-VERSION=''
 
-read_version_from_changelog() {
-    file=$1
-    if [ ! -r "$file" ]; then
-        return 0
-    fi
-
-    awk '
-        /^## \[[0-9]+\.[0-9]+\.[0-9]+\]/ {
-            line = $0
-            sub(/^## \[/, "", line)
-            sub(/\].*$/, "", line)
-            print line
-            exit
-        }
-    ' "$file"
-}
-
-if [ -r "$VERSION_FILE" ]; then
-    VERSION=$(head -n 1 "$VERSION_FILE")
-elif [ -r "$SHARE_VERSION_FILE" ]; then
-    VERSION=$(head -n 1 "$SHARE_VERSION_FILE")
+# shellcheck source=lib/common.sh
+if [ -f "$SCRIPT_DIR/lib/common.sh" ]; then
+    . "$SCRIPT_DIR/lib/common.sh"
+elif [ -f /usr/lib/openwrt-extended-backup/common.sh ]; then
+    . /usr/lib/openwrt-extended-backup/common.sh
 else
-    changelog_version=$(read_version_from_changelog "$CHANGELOG_FILE")
-    if [ -n "$changelog_version" ]; then
-        VERSION=$changelog_version
-    fi
+    printf '%s: common.sh not found\n' "$(basename "$0")" >&2
+    exit 1
 fi
 
-if [ -z "$VERSION" ]; then
-    VERSION=$VERSION_FALLBACK
-fi
-
-EX_OK=0
-EX_USAGE=64
-EX_DATAERR=65
-EX_UNAVAILABLE=69
-EX_SOFTWARE=70
+common_init "$0"
 
 ARCHIVE_PATH=''
 PACKAGES_ARG=''
@@ -86,41 +51,10 @@ STOPPED_SERVICES=''
 
 NON_ESSENTIAL_SERVICES='uhttpd rpcd dnsmasq firewall dropbear'
 
-timestamp() {
-    date '+%Y-%m-%d %H:%M:%S'
-}
-
-log_msg() {
-    level=$1
-    shift
-    if [ "$#" -gt 0 ]; then
-        printf '%s %-5s %s\n' "$(timestamp)" "$level" "$*" >&2
-    else
-        printf '%s %-5s\n' "$(timestamp)" "$level" >&2
-    fi
-}
-
-log_info() {
-    log_msg 'INFO' "$@"
-}
-
-log_warn() {
-    log_msg 'WARN' "$@"
-}
-
-log_error() {
-    log_msg 'ERROR' "$@"
-}
-
 fatal() {
     message=$1
     code=${2:-$EX_SOFTWARE}
-    log_error "$message"
-    exit "$code"
-}
-
-show_version() {
-    printf '%s version %s\n' "$PROGRAM" "$VERSION"
+    die "$message" "$code"
 }
 
 usage() {
@@ -151,9 +85,7 @@ to_absolute_path() {
 }
 
 require_command() {
-    if ! command -v "$1" >/dev/null 2>&1; then
-        fatal "Требуемая утилита '$1' недоступна" "$EX_UNAVAILABLE"
-    fi
+    require_cmd "$1"
 }
 
 check_openwrt() {
@@ -430,8 +362,8 @@ maybe_reboot() {
     log_info 'Перезагрузка не выполнена. Запустите reboot вручную при необходимости'
 }
 
-cleanup() {
-    status=$?
+restore_cleanup() {
+    status=$1
     set +e
 
     if [ -n "$COPY_ARCHIVE" ] && [ -f "$COPY_ARCHIVE" ]; then
@@ -451,13 +383,9 @@ cleanup() {
     if [ "$status" -ne 0 ] && [ -n "$SNAPSHOT_PATH" ]; then
         log_warn "Восстановление завершилось с ошибкой. Снимок сохранён: $SNAPSHOT_PATH"
     fi
-
-    exit "$status"
 }
 
-trap cleanup EXIT
-trap 'exit 130' INT
-trap 'exit 143' TERM
+common_add_cleanup restore_cleanup
 
 parse_args() {
     while [ "$#" -gt 0 ]; do
@@ -497,7 +425,7 @@ parse_args() {
                 exit "$EX_OK"
                 ;;
             -V|--version)
-                show_version
+                common_print_version
                 exit "$EX_OK"
                 ;;
             --)
