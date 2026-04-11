@@ -1,9 +1,4 @@
-# user-installed opkg packages (4)
-# main packages (4)
-dnsmasq-full
-libfoo+bar
-node-exporter
-syslog-ng
+# user-installed opkg packages (0)
+# main packages (0)
 
 opkg update
-opkg install dnsmasq-full libfoo+bar node-exporter syslog-ng

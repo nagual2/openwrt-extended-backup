@@ -1,11 +1,8 @@
-# user-installed opkg packages (6)
-# main packages (6)
+# user-installed opkg packages (3)
+# main packages (3)
 bash
-htop
-luci-app-sqm
 luci-theme-material
 smartmontools
-tailscale
 
 opkg update
-opkg install bash htop luci-app-sqm luci-theme-material smartmontools tailscale
+opkg install bash luci-theme-material smartmontools

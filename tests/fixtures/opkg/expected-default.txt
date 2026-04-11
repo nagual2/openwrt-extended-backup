@@ -1,16 +1,9 @@
-# user-installed opkg packages (7)
-# main packages (6)
+# user-installed opkg packages (3)
+# main packages (3)
 bash
-htop
-luci-app-sqm
 luci-theme-material
 smartmontools
-tailscale
-
-# LuCI translations (1)
-luci-i18n-firewall-ru
 
 opkg update
-opkg install bash htop luci-app-sqm luci-theme-material smartmontools tailscale
-opkg install luci-i18n-firewall-ru
+opkg install bash luci-theme-material smartmontools
 

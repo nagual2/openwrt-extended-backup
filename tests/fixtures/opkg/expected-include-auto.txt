@@ -1,16 +1,9 @@
-# user-installed opkg packages (8)
-# main packages (7)
+# user-installed opkg packages (4)
+# main packages (4)
 bash
-htop
 libcap-bin
-luci-app-sqm
 luci-theme-material
 smartmontools
-tailscale
-
-# LuCI translations (1)
-luci-i18n-firewall-ru
 
 opkg update
-opkg install bash htop libcap-bin luci-app-sqm luci-theme-material smartmontools tailscale
-opkg install luci-i18n-firewall-ru
+opkg install bash libcap-bin luci-theme-material smartmontools
