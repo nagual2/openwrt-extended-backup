@@ -319,3 +319,4 @@ common_getopts_consume_value() {
 }
 
 return 0
+
