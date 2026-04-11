@@ -115,6 +115,7 @@ teardown() {
 }
 
 @test "creates archive in output directory across shells" {
+  # bats test_tags=uses_mocks
   for idx in "${!SHELL_MATRIX_PATHS[@]}"; do
     local shell_label="${SHELL_MATRIX_LABELS[$idx]}"
     local shell_path="${SHELL_MATRIX_PATHS[$idx]}"
@@ -204,6 +205,46 @@ teardown() {
 }
 
 @test "fails and removes partial archive when tar fails" {
+  # bats test_tags=uses_mocks
+  for idx in "${!SHELL_MATRIX_PATHS[@]}"; do
+    local shell_label="${SHELL_MATRIX_LABELS[$idx]}"
+    local shell_path="${SHELL_MATRIX_PATHS[$idx]}"
+
+    reset_overlay_fixture
+    rm -rf "${OUTPUT_DIR}"
+    mock_reset_command_log
+
+    local expected
+    expected="$(expected_archive_path)"
+    rm -f "${expected}"
+
+    export MOCK_FAIL_TAR=1
+    export MOCK_FAIL_TAR_MESSAGE='tar failure'
+    export MOCK_FAIL_TAR_EXIT_CODE=2
+
+    MOCK_BACKUP_SHELL="${shell_path}"
+    mock_run_backup --overlay "${OVERLAY_DIR}" --output "${OUTPUT_DIR}"
+    local run_status=$status
+    local run_output="${output}"
+    unset MOCK_BACKUP_SHELL
+
+    unset MOCK_FAIL_TAR
+    unset MOCK_FAIL_TAR_MESSAGE
+    unset MOCK_FAIL_TAR_EXIT_CODE
+
+    if [ "${run_status}" -ne 70 ]; then
+      fail "[${shell_label}] expected EX_SOFTWARE (70), got ${run_status}: ${run_output}"
+    fi
+
+    assert_output_contains "${run_output}" "Не удалось создать архив" "${shell_label}"
+    [ ! -f "${expected}" ] || fail "[${shell_label}] archive should not exist after tar failure"
+
+    rm -rf "${OUTPUT_DIR}"
+  done
+}
+
+@test "handles tar failure gracefully" {
+  # bats test_tags=uses_mocks
   for idx in "${!SHELL_MATRIX_PATHS[@]}"; do
     local shell_label="${SHELL_MATRIX_LABELS[$idx]}"
     local shell_path="${SHELL_MATRIX_PATHS[$idx]}"
@@ -242,6 +283,7 @@ teardown() {
 }
 
 @test "rejects unsupported export mode" {
+  # bats test_tags=uses_mocks
   for idx in "${!SHELL_MATRIX_PATHS[@]}"; do
     local shell_label="${SHELL_MATRIX_LABELS[$idx]}"
     local shell_path="${SHELL_MATRIX_PATHS[$idx]}"
