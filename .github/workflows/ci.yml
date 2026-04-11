@@ -31,7 +31,15 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y bats
 
+      - name: Fix line endings and permissions
+        run: |
+          sudo apt-get install -y dos2unix
+          find scripts tests -type f \( -name '*.sh' -o -name 'openwrt_*' -o -name 'user_installed*' -o -name '*.bats' -o -name '*.bash' \) -exec dos2unix {} \; -exec chmod +x {} \;
+
       - name: Run Bats tests
+        shell: 'script -q -e -c "bash {0}"'
+        env:
+          TERM: linux
         run: |
           make test USE_SYSTEM_TOOLS=1
 

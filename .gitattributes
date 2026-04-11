@@ -1,7 +1,10 @@
+# Force LF line endings for shell scripts
 * text=auto eol=lf
 *.sh text eol=lf
 *.bash text eol=lf
 *.bats text eol=lf
+
+# Binary files
 tools/* binary
 tools/README.md text
 tools/LICENSES/** text
