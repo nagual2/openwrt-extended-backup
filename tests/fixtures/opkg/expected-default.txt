@@ -13,3 +13,4 @@ luci-i18n-firewall-ru
 opkg update
 opkg install bash htop luci-app-sqm luci-theme-material smartmontools tailscale
 opkg install luci-i18n-firewall-ru
+
