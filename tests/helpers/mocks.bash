@@ -192,7 +192,11 @@ mock_run_user_installed() {
   rm -f "${status_file}" "${output_file}"
   (
     cd "${MOCK_WORKSPACE}"
-    run env PATH="${PATH}" "${script}" "$@"
+    run env \
+      PATH="${PATH}" \
+      MOCK_COMMAND_HANDLER_DIR="${MOCK_COMMAND_HANDLER_DIR}" \
+      MOCK_COMMAND_LOG="${MOCK_COMMAND_LOG}" \
+      "${script}" "$@"
     printf '%s\n' "${status}" > "${status_file}"
     printf '%s\n' "${output}" > "${output_file}"
   )
