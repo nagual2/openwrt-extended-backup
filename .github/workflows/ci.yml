@@ -33,7 +33,7 @@ jobs:
 
       - name: Run Bats tests
         run: |
-          make test
+          make test USE_SYSTEM_TOOLS=1
 
   build-ipk:
     runs-on: ubuntu-latest
