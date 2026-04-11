@@ -1,4 +1,5 @@
 # Allow sourcing runtime-generated paths on OpenWrt systems.
-disable=SC1090,SC1091
+# SC2317: Commands appear unreachable - false positives for function exports
+disable=SC1090,SC1091,SC2317
 
 
