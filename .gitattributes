@@ -4,6 +4,10 @@
 *.bash text eol=lf
 *.bats text eol=lf
 
+# Test fixtures
+*.txt text eol=lf
+tests/fixtures/** text eol=lf
+
 # Binary files
 tools/* binary
 tools/README.md text
