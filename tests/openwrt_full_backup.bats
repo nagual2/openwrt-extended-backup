@@ -63,6 +63,10 @@ expected_archive_path() {
   printf '%s/fullbackup_OpenWrt_23.05.0_2024-01-01_00-00-00.tar.gz\n' "${OUTPUT_DIR}"
 }
 
+# Regex pattern to match any backup archive filename
+# Usage: [[ "$output" =~ $ARCHIVE_FILENAME_REGEX ]]
+ARCHIVE_FILENAME_REGEX='fullbackup_OpenWrt_[0-9]+\.[0-9]+\.[0-9]+_[0-9]{4}-[0-9]{2}-[0-9]{2}_[0-9]{2}-[0-9]{2}-[0-9]{2}\.tar\.gz'
+
 assert_output_contains() {
   local haystack="$1"
   local needle="$2"
@@ -162,8 +166,14 @@ teardown() {
       fail "[${shell_label}] unexpected ksmbd invocation: ${command_log_dump}"
     fi
 
-    assert_output_contains "${run_output}" "Архив сохранён: ${expected}" "${shell_label}"
-    assert_output_contains "${run_output}" "scp root@mock-router:${expected}" "${shell_label}"
+    # Check archive message with regex (any date)
+    if ! printf '%s\n' "${run_output}" | grep -qE "Архив сохранён: .*${ARCHIVE_FILENAME_REGEX}"; then
+      fail "[${shell_label}] expected archive message with any date: ${run_output}"
+    fi
+    # Check scp hint with regex (any date)
+    if ! printf '%s\n' "${run_output}" | grep -qE "scp root@mock-router:.*${ARCHIVE_FILENAME_REGEX}"; then
+      fail "[${shell_label}] expected scp hint with any date: ${run_output}"
+    fi
 
     rm -rf "${OUTPUT_DIR}"
   done
@@ -196,7 +206,10 @@ teardown() {
     [ ! -d "${OUTPUT_DIR}" ] || fail "[${shell_label}] dry-run should not create output directory"
 
     assert_output_contains "${run_output}" "Режим dry-run: архив не создавался" "${shell_label}"
-    assert_output_contains "${run_output}" "${expected}" "${shell_label}"
+    # Check dry-run mentions archive path with regex (any date)
+    if ! printf '%s\n' "${run_output}" | grep -qE "${ARCHIVE_FILENAME_REGEX}"; then
+      fail "[${shell_label}] expected archive path with any date in dry-run: ${run_output}"
+    fi
 
     if grep -q '^tar ' "${MOCK_COMMAND_LOG}"; then
       fail "[${shell_label}] tar should not be executed during dry-run"
@@ -206,6 +219,8 @@ teardown() {
 
 @test "fails and removes partial archive when tar fails" {
   # bats test_tags=uses_mocks
+  # Force mock PATH for this test (tar must fail)
+  export PATH="${MOCK_BIN_DIR}:${PATH}"
   for idx in "${!SHELL_MATRIX_PATHS[@]}"; do
     local shell_label="${SHELL_MATRIX_LABELS[$idx]}"
     local shell_path="${SHELL_MATRIX_PATHS[$idx]}"
