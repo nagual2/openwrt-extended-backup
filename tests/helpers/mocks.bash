@@ -48,7 +48,6 @@ mock_setup() {
     [[ -f "${template}" ]] || continue
     local name
     name="$(basename "${template}")"
-    [[ "${name}" == "_mock" ]] && continue
     ln -s "${template}" "${MOCK_BIN_DIR}/${name}"
   done
 
