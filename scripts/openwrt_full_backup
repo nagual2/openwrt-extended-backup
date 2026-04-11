@@ -324,8 +324,6 @@ create_archive() {
         cd "$overlay_parent" 2>/dev/null &&
             tar -czpf "$ARCHIVE_PATH" \
                 --numeric-owner \
-                --same-owner \
-                -X "$TAR_EXCLUDE_FILE" \
                 "$overlay_name"
     ); then
         die 'Не удалось создать архив' "$EX_SOFTWARE"

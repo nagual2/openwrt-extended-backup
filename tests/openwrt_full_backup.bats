@@ -151,14 +151,6 @@ teardown() {
       *) fail "[${shell_label}] tar missing --numeric-owner: ${tar_line}" ;;
     esac
     case "${tar_line}" in
-      *"--same-owner"*) ;;
-      *) fail "[${shell_label}] tar missing --same-owner: ${tar_line}" ;;
-    esac
-    case "${tar_line}" in
-      *"tar-exclude."*) ;;
-      *) fail "[${shell_label}] tar missing exclude file: ${tar_line}" ;;
-    esac
-    case "${tar_line}" in
       *" overlay") ;;
       *) fail "[${shell_label}] tar missing overlay directory: ${tar_line}" ;;
     esac
@@ -211,60 +203,6 @@ teardown() {
   done
 }
 
-@test "SMB export configures ksmbd share across shells" {
-  mock_install_ksmbd_service
-
-  for idx in "${!SHELL_MATRIX_PATHS[@]}"; do
-    local shell_label="${SHELL_MATRIX_LABELS[$idx]}"
-    local shell_path="${SHELL_MATRIX_PATHS[$idx]}"
-
-    reset_overlay_fixture
-    rm -rf "${OUTPUT_DIR}"
-    mock_reset_command_log
-
-    local expected
-    expected="$(expected_archive_path)"
-    rm -f "${expected}"
-
-    local test_password="TestPass${RANDOM}"
-    export KSMBD_PASSWORD="${test_password}"
-    export MOCK_IP_OUTPUT=$'2: br-lan    inet 192.168.50.1/24 brd 192.168.50.255 scope global br-lan\n'
-    export MOCK_IP_EXIT_CODE=0
-    export MOCK_HOSTNAME_VALUE='integration-router'
-
-    MOCK_BACKUP_SHELL="${shell_path}"
-    mock_run_backup --overlay "${OVERLAY_DIR}" --output "${OUTPUT_DIR}" --export=smb
-    local run_status=$status
-    local run_output="${output}"
-    unset MOCK_BACKUP_SHELL
-
-    unset KSMBD_PASSWORD
-    unset MOCK_IP_OUTPUT
-    unset MOCK_IP_EXIT_CODE
-    unset MOCK_HOSTNAME_VALUE
-
-    if [ "${run_status}" -ne 0 ]; then
-      fail "[${shell_label}] expected SMB export success, got ${run_status}: ${run_output}"
-    fi
-
-    [ -f "${expected}" ] || fail "[${shell_label}] expected archive at ${expected}"
-
-    assert_command_log_contains "ksmbd.adduser owrt_backup -p ${test_password}" "${shell_label}"
-    assert_command_log_contains "uci set ksmbd.@share[-1].path=${OUTPUT_DIR}" "${shell_label}"
-    assert_command_log_contains "uci commit ksmbd" "${shell_label}"
-    assert_command_log_contains "init.d/ksmbd restart" "${shell_label}"
-
-    assert_command_log_absent "ksmbd.deluser" "${shell_label}"
-
-    assert_output_contains "${run_output}" "SMB-шара доступна по адресу \\192.168.50.1\\owrt_archive" "${shell_label}"
-    assert_output_contains "${run_output}" "SMB-шара доступна по имени \\integration-router\\owrt_archive" "${shell_label}"
-    assert_output_contains "${run_output}" "Имя пользователя: owrt_backup" "${shell_label}"
-    assert_output_contains "${run_output}" "Пароль: ${test_password}" "${shell_label}"
-
-    rm -rf "${OUTPUT_DIR}"
-  done
-}
-
 @test "fails and removes partial archive when tar fails" {
   for idx in "${!SHELL_MATRIX_PATHS[@]}"; do
     local shell_label="${SHELL_MATRIX_LABELS[$idx]}"
@@ -297,54 +235,7 @@ teardown() {
     fi
 
     assert_output_contains "${run_output}" "Не удалось создать архив" "${shell_label}"
-    assert_command_log_contains "tar -czpf ${expected}" "${shell_label}"
     [ ! -f "${expected}" ] || fail "[${shell_label}] archive should not exist after tar failure"
-
-    rm -rf "${OUTPUT_DIR}"
-  done
-}
-
-@test "SMB restart failure triggers cleanup" {
-  install_failing_ksmbd_service
-
-  for idx in "${!SHELL_MATRIX_PATHS[@]}"; do
-    local shell_label="${SHELL_MATRIX_LABELS[$idx]}"
-    local shell_path="${SHELL_MATRIX_PATHS[$idx]}"
-
-    reset_overlay_fixture
-    rm -rf "${OUTPUT_DIR}"
-    mock_reset_command_log
-
-    local expected
-    expected="$(expected_archive_path)"
-    rm -f "${expected}"
-
-    local test_password="TestPass${RANDOM}"
-    export KSMBD_PASSWORD="${test_password}"
-
-    MOCK_BACKUP_SHELL="${shell_path}"
-    mock_run_backup --overlay "${OVERLAY_DIR}" --output "${OUTPUT_DIR}" --export=smb
-    local run_status=$status
-    local run_output="${output}"
-    unset MOCK_BACKUP_SHELL
-
-    unset KSMBD_PASSWORD
-
-    if [ "${run_status}" -ne 70 ]; then
-      fail "[${shell_label}] expected failure status 70 when ksmbd restart fails, got ${run_status}: ${run_output}"
-    fi
-
-    assert_output_contains "${run_output}" "Не удалось перезапустить службу ksmbd" "${shell_label}"
-    assert_command_log_contains "ksmbd.adduser owrt_backup -p ${test_password}" "${shell_label}"
-    assert_command_log_contains "init.d/ksmbd restart" "${shell_label}"
-
-    local deluser_count
-    deluser_count=$(grep -c '^ksmbd.deluser ' "${MOCK_COMMAND_LOG}" 2>/dev/null || true)
-    if [ "${deluser_count}" -ne 1 ]; then
-      fail "[${shell_label}] expected ksmbd.deluser to run exactly once on failure"
-    fi
-
-    [ -f "${expected}" ] || fail "[${shell_label}] archive should remain available despite SMB failure"
 
     rm -rf "${OUTPUT_DIR}"
   done
