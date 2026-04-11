@@ -270,6 +270,9 @@ teardown() {
 
 @test "handles tar failure gracefully" {
   # bats test_tags=uses_mocks
+  if [[ "${USE_SYSTEM_TOOLS:-}" == "1" ]]; then
+    skip "This test requires mocks (incompatible with USE_SYSTEM_TOOLS=1)"
+  fi
   for idx in "${!SHELL_MATRIX_PATHS[@]}"; do
     local shell_label="${SHELL_MATRIX_LABELS[$idx]}"
     local shell_path="${SHELL_MATRIX_PATHS[$idx]}"
