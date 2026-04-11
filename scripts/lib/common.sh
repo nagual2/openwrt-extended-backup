@@ -284,7 +284,7 @@ common_openwrt_description() {
 
 common_sanitize_token() {
     token=$1
-    printf '%s\n' "$token" | tr ' ' '_' | tr -c 'A-Za-z0-9_.-' '_'
+    printf '%s' "$token" | tr ' ' '_' | tr -c 'A-Za-z0-9_.-' '_'
 }
 
 common_to_bool() {
