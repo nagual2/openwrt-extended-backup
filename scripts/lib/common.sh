@@ -16,6 +16,7 @@ COMMON_LIB_INITIALIZED=1
 # Standard exit codes (BSD sysexits) with sensible defaults.
 : "${EX_OK:=0}"
 : "${EX_USAGE:=64}"
+: "${EX_DATAERR:=65}"
 : "${EX_UNAVAILABLE:=69}"
 : "${EX_SOFTWARE:=70}"
 
