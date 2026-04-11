@@ -1,3 +1,7 @@
+* text=auto eol=lf
+*.sh text eol=lf
+*.bash text eol=lf
+*.bats text eol=lf
 tools/* binary
 tools/README.md text
 tools/LICENSES/** text
