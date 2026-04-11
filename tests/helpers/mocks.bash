@@ -147,37 +147,30 @@ mock_backup_script() {
 mock_run_backup() {
   local script
   script="$(mock_backup_script)"
-  local status_file="${MOCK_TMP_DIR}/.mock_run_status"
-  local output_file="${MOCK_TMP_DIR}/.mock_run_output"
-  rm -f "${status_file}" "${output_file}"
-  (
-    cd "${MOCK_WORKSPACE}"
-    if [ -n "${MOCK_BACKUP_SHELL-}" ]; then
-      run env \
-        OPENWRT_RELEASE_PATH="${OPENWRT_RELEASE_PATH-}" \
-        KSMBD_INIT_SCRIPT="${KSMBD_INIT_SCRIPT-}" \
-        SMB_CLEANUP_DIR="${SMB_CLEANUP_DIR-}" \
-        MOCK_COMMAND_LOG="${MOCK_COMMAND_LOG}" \
-        MOCK_COMMAND_HANDLER_DIR="${MOCK_COMMAND_HANDLER_DIR}" \
-        TMPDIR="${MOCK_TMP_DIR:-${BATS_TEST_TMPDIR}}" \
-        PATH="${PATH}" \
-        "${MOCK_BACKUP_SHELL}" "${script}" "$@"
-    else
-      run env \
-        OPENWRT_RELEASE_PATH="${OPENWRT_RELEASE_PATH-}" \
-        KSMBD_INIT_SCRIPT="${KSMBD_INIT_SCRIPT-}" \
-        SMB_CLEANUP_DIR="${SMB_CLEANUP_DIR-}" \
-        MOCK_COMMAND_LOG="${MOCK_COMMAND_LOG}" \
-        MOCK_COMMAND_HANDLER_DIR="${MOCK_COMMAND_HANDLER_DIR}" \
-        TMPDIR="${MOCK_TMP_DIR:-${BATS_TEST_TMPDIR}}" \
-        PATH="${PATH}" \
-        "${script}" "$@"
-    fi
-    printf '%s\n' "${status}" > "${status_file}"
-    printf '%s\n' "${output}" > "${output_file}"
-  )
-  status=$(cat "${status_file}")
-  output=$(cat "${output_file}")
+  local _pwd="$(pwd)"
+  cd "${MOCK_WORKSPACE}"
+  if [ -n "${MOCK_BACKUP_SHELL-}" ]; then
+    run env \
+      OPENWRT_RELEASE_PATH="${OPENWRT_RELEASE_PATH-}" \
+      KSMBD_INIT_SCRIPT="${KSMBD_INIT_SCRIPT-}" \
+      SMB_CLEANUP_DIR="${SMB_CLEANUP_DIR-}" \
+      MOCK_COMMAND_LOG="${MOCK_COMMAND_LOG}" \
+      MOCK_COMMAND_HANDLER_DIR="${MOCK_COMMAND_HANDLER_DIR}" \
+      TMPDIR="${MOCK_TMP_DIR:-${BATS_TEST_TMPDIR}}" \
+      PATH="${PATH}" \
+      "${MOCK_BACKUP_SHELL}" "${script}" "$@"
+  else
+    run env \
+      OPENWRT_RELEASE_PATH="${OPENWRT_RELEASE_PATH-}" \
+      KSMBD_INIT_SCRIPT="${KSMBD_INIT_SCRIPT-}" \
+      SMB_CLEANUP_DIR="${SMB_CLEANUP_DIR-}" \
+      MOCK_COMMAND_LOG="${MOCK_COMMAND_LOG}" \
+      MOCK_COMMAND_HANDLER_DIR="${MOCK_COMMAND_HANDLER_DIR}" \
+      TMPDIR="${MOCK_TMP_DIR:-${BATS_TEST_TMPDIR}}" \
+      PATH="${PATH}" \
+      "${script}" "$@"
+  fi
+  cd "${_pwd}"
 }
 
 mock_user_script() {
@@ -187,21 +180,14 @@ mock_user_script() {
 mock_run_user_installed() {
   local script
   script="$(mock_user_script)"
-  local status_file="${MOCK_TMP_DIR}/.mock_run_status"
-  local output_file="${MOCK_TMP_DIR}/.mock_run_output"
-  rm -f "${status_file}" "${output_file}"
-  (
-    cd "${MOCK_WORKSPACE}"
-    run env \
-      PATH="${PATH}" \
-      MOCK_COMMAND_HANDLER_DIR="${MOCK_COMMAND_HANDLER_DIR}" \
-      MOCK_COMMAND_LOG="${MOCK_COMMAND_LOG}" \
-      "${script}" "$@"
-    printf '%s\n' "${status}" > "${status_file}"
-    printf '%s\n' "${output}" > "${output_file}"
-  )
-  status=$(cat "${status_file}")
-  output=$(cat "${output_file}")
+  local _pwd="$(pwd)"
+  cd "${MOCK_WORKSPACE}"
+  run env \
+    PATH="${PATH}" \
+    MOCK_COMMAND_HANDLER_DIR="${MOCK_COMMAND_HANDLER_DIR}" \
+    MOCK_COMMAND_LOG="${MOCK_COMMAND_LOG}" \
+    "${script}" "$@"
+  cd "${_pwd}"
 }
 
 mock_assert_log_contains() {
