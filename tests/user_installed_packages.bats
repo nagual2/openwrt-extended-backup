@@ -21,6 +21,9 @@ assert_output_equals_fixture() {
 
 @test "user_installed_packages prints default reinstall commands" {
   # bats test_tags=uses_mocks
+  if [[ "${USE_SYSTEM_TOOLS:-}" == "1" ]]; then
+    skip "This test requires mocks (incompatible with USE_SYSTEM_TOOLS=1)"
+  fi
   status_file="${MOCK_FIXTURES_DIR}/opkg/status.sample"
   user_list="${MOCK_FIXTURES_DIR}/opkg/user-installed.list"
   expected_file="${MOCK_FIXTURES_DIR}/opkg/expected-default.txt"
@@ -33,6 +36,9 @@ assert_output_equals_fixture() {
 
 @test "user_installed_packages supports excluding luci translations" {
   # bats test_tags=uses_mocks
+  if [[ "${USE_SYSTEM_TOOLS:-}" == "1" ]]; then
+    skip "This test requires mocks (incompatible with USE_SYSTEM_TOOLS=1)"
+  fi
   status_file="${MOCK_FIXTURES_DIR}/opkg/status.sample"
   user_list="${MOCK_FIXTURES_DIR}/opkg/user-installed.list"
   expected_file="${MOCK_FIXTURES_DIR}/opkg/expected-no-luci.txt"
@@ -45,6 +51,9 @@ assert_output_equals_fixture() {
 
 @test "user_installed_packages can include auto dependencies" {
   # bats test_tags=uses_mocks
+  if [[ "${USE_SYSTEM_TOOLS:-}" == "1" ]]; then
+    skip "This test requires mocks (incompatible with USE_SYSTEM_TOOLS=1)"
+  fi
   status_file="${MOCK_FIXTURES_DIR}/opkg/status.sample"
   user_list="${MOCK_FIXTURES_DIR}/opkg/user-installed.list"
   expected_file="${MOCK_FIXTURES_DIR}/opkg/expected-include-auto.txt"
@@ -57,6 +66,9 @@ assert_output_equals_fixture() {
 
 @test "user_installed_packages handles special-character package names" {
   # bats test_tags=uses_mocks
+  if [[ "${USE_SYSTEM_TOOLS:-}" == "1" ]]; then
+    skip "This test requires mocks (incompatible with USE_SYSTEM_TOOLS=1)"
+  fi
   status_file="${MOCK_FIXTURES_DIR}/opkg/status.special.sample"
   user_list="${MOCK_FIXTURES_DIR}/opkg/user-installed-special.list"
   expected_file="${MOCK_FIXTURES_DIR}/opkg/expected-special.txt"
@@ -80,6 +92,9 @@ assert_output_equals_fixture() {
 
 @test "user_installed_packages parses complex status metadata" {
   # bats test_tags=uses_mocks
+  if [[ "${USE_SYSTEM_TOOLS:-}" == "1" ]]; then
+    skip "This test requires mocks (incompatible with USE_SYSTEM_TOOLS=1)"
+  fi
   status_file="${MOCK_FIXTURES_DIR}/opkg/status.complex"
   expected_file="${MOCK_FIXTURES_DIR}/opkg/expected-complex-default.txt"
 
@@ -91,6 +106,9 @@ assert_output_equals_fixture() {
 
 @test "user_installed_packages includes auto deps for complex status when requested" {
   # bats test_tags=uses_mocks
+  if [[ "${USE_SYSTEM_TOOLS:-}" == "1" ]]; then
+    skip "This test requires mocks (incompatible with USE_SYSTEM_TOOLS=1)"
+  fi
   status_file="${MOCK_FIXTURES_DIR}/opkg/status.complex"
   expected_file="${MOCK_FIXTURES_DIR}/opkg/expected-complex-include-auto.txt"
 
@@ -102,6 +120,9 @@ assert_output_equals_fixture() {
 
 @test "user_installed_packages writes output to a file" {
   # bats test_tags=uses_mocks
+  if [[ "${USE_SYSTEM_TOOLS:-}" == "1" ]]; then
+    skip "This test requires mocks (incompatible with USE_SYSTEM_TOOLS=1)"
+  fi
   status_file="${MOCK_FIXTURES_DIR}/opkg/status.sample"
   user_list="${MOCK_FIXTURES_DIR}/opkg/user-installed.list"
   expected_file="${MOCK_FIXTURES_DIR}/opkg/expected-default.txt"
@@ -118,6 +139,9 @@ assert_output_equals_fixture() {
 
 @test "user_installed_packages falls back to opkg list-installed when status file is unavailable" {
   # bats test_tags=uses_mocks
+  if [[ "${USE_SYSTEM_TOOLS:-}" == "1" ]]; then
+    skip "This test requires mocks (incompatible with USE_SYSTEM_TOOLS=1)"
+  fi
   expected_file="${MOCK_FIXTURES_DIR}/opkg/expected-default.txt"
   user_list="${MOCK_FIXTURES_DIR}/opkg/user-installed.list"
   opkg_handler="${MOCK_COMMAND_HANDLER_DIR}/opkg"
