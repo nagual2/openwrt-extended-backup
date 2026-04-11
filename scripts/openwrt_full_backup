@@ -322,7 +322,9 @@ create_archive() {
     REMOVE_ARCHIVE_ON_FAILURE=1
     if ! (
         cd "$overlay_parent" 2>/dev/null &&
-            tar -czf "$ARCHIVE_PATH" \
+            tar -czpf "$ARCHIVE_PATH" \
+                --numeric-owner \
+                --same-owner \
                 -X "$TAR_EXCLUDE_FILE" \
                 "$overlay_name"
     ); then
