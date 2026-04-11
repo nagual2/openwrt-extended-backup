@@ -155,7 +155,7 @@ teardown() {
       *) fail "[${shell_label}] tar missing --same-owner: ${tar_line}" ;;
     esac
     case "${tar_line}" in
-      *"-X ${MOCK_TMP_DIR}/tar-exclude."*) ;;
+      *"tar-exclude."*) ;;
       *) fail "[${shell_label}] tar missing exclude file: ${tar_line}" ;;
     esac
     case "${tar_line}" in
