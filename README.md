@@ -37,7 +37,7 @@ All scripts live in [`scripts/`](./scripts/) and share helper functions under [`
 ### Build and install the `.ipk`
 
 ```
-make ipk            # builds dist/ctoolkit_<version>-1_all.ipk
+make ipk            # builds dist/openwrt-extended-backup_<version>-1_all.ipk
 make install        # installs the generated package with opkg when available
 ```
 

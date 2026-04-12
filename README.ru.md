@@ -37,7 +37,7 @@
 ### Сборка и установка `.ipk`
 
 ```
-make ipk            # собирает dist/ctoolkit_<version>-1_all.ipk
+make ipk            # собирает dist/openwrt-extended-backup_<version>-1_all.ipk
 make install        # устанавливает собранный пакет через opkg, если доступен
 ```
 
