@@ -1,5 +1,7 @@
 # Набор утилит расширенного резервного копирования OpenWrt
 
+[English](README.md) | **Русский** | [Deutsch](README.de.md)
+
 [![CI](https://github.com/nagual2/openwrt-extended-backup/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/nagual2/openwrt-extended-backup/actions/workflows/ci.yml)
 
 Коллекция POSIX shell-утилит, работающих непосредственно на роутерах OpenWrt. Инструменты помогают экспортировать записываемый overlay, безопасно восстановить сохранённый архив и записать список пакетов, установленных вручную.

@@ -1,5 +1,7 @@
 # OpenWrt erweitertes Backup-Toolkit
 
+[English](README.md) | [Русский](README.ru.md) | **Deutsch**
+
 [![CI](https://github.com/nagual2/openwrt-extended-backup/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/nagual2/openwrt-extended-backup/actions/workflows/ci.yml)
 
 Eine Sammlung von POSIX-Shell-Dienstprogrammen, die direkt auf OpenWrt-Routern ausgeführt werden. Die Tools helfen beim Exportieren des beschreibbaren Overlays, der sicheren Wiederherstellung eines gespeicherten Archivs und der Aufzeichnung der Liste der manuell installierten Pakete.

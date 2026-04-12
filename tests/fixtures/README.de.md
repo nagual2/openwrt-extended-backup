@@ -1,5 +1,7 @@
 # Test-Fixtures
 
+[English](README.md) | [Русский](README.ru.md) | **Deutsch**
+
 Dieses Verzeichnis enthält Datendateien, die vom Bats-Test-Consumer genutzt werden.
 
 - `system/openwrt_release` – repräsentativer Inhalt von `/etc/openwrt_release`, der von `openwrt_full_backup`-Tests verwendet wird.

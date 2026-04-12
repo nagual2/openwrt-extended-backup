@@ -1,5 +1,7 @@
 # Sicherheitsaudit-Korrekturen - Zusammenfassungsbericht
 
+[English](SECURITY_AUDIT_FIXES.md) | [Русский](SECURITY_AUDIT_FIXES.ru.md) | **Deutsch**
+
 ## Überblick
 
 Dieses Dokument fasst die während des Sicherheitsaudits gefundenen Sicherheitsprobleme und die zur Behebung ergriffenen Maßnahmen zusammen.

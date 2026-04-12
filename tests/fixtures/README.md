@@ -1,5 +1,7 @@
 # Test fixtures
 
+[English](README.md) | [Русский](README.ru.md) | [Deutsch](README.de.md)
+
 This directory contains data files consumed by the Bats test suite.
 
 - `system/openwrt_release` — representative contents of `/etc/openwrt_release` used by `openwrt_full_backup` tests.

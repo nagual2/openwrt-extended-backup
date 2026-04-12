@@ -1,5 +1,7 @@
 # Eingebettete Shell-Tools
 
+[English](README.md) | [Русский](README.ru.md) | **Deutsch**
+
 Dieses Verzeichnis bietet die vorgefertigten ausführbaren Dateien, die den `shell quality`-Continuous-Integration-Job des Repositorys antreiben. Die Artefakte sind eingebettet (vendored), damit CI ohne Netzwerk-Downloads ausgeführt werden kann.
 
 ## Tool-Inventar

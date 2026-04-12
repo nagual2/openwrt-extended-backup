@@ -1,5 +1,7 @@
 # Vendored shell tooling
 
+[English](README.md) | [Русский](README.ru.md) | [Deutsch](README.de.md)
+
 This directory provides the prebuilt executables that drive the repository's
 `shell quality` continuous integration job.  The artifacts are vendored so that
 CI can run without performing any network downloads.

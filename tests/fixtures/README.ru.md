@@ -1,5 +1,7 @@
 # Тестовые фикстуры
 
+[English](README.md) | **Русский** | [Deutsch](README.de.md)
+
 Эта директория содержит файлы данных, используемые тестовым набором Bats.
 
 - `system/openwrt_release` — репрезентативное содержимое `/etc/openwrt_release`, используемое тестами `openwrt_full_backup`.

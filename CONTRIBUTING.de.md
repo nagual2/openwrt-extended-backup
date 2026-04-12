@@ -1,5 +1,7 @@
 # Beitrag zu openwrt-extended-backup
 
+[English](CONTRIBUTING.md) | [Русский](CONTRIBUTING.ru.md) | **Deutsch**
+
 Vielen Dank für Ihr Interesse an einem Beitrag! Dieses Dokument enthält Richtlinien für Beiträge zum Projekt.
 
 ## Verhaltenskodex

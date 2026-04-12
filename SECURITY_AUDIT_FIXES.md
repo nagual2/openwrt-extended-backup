@@ -1,5 +1,7 @@
 # Security Audit Fixes - Summary Report
 
+[English](SECURITY_AUDIT_FIXES.md) | [Русский](SECURITY_AUDIT_FIXES.ru.md) | [Deutsch](SECURITY_AUDIT_FIXES.de.md)
+
 ## Overview
 
 This document summarizes the security issues found during the security audit and the remediation steps taken to address them.
