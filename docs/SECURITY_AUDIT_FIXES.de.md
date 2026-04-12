@@ -1,6 +1,7 @@
 # Sicherheitsaudit-Korrekturen - Zusammenfassungsbericht
 
-[English](SECURITY_AUDIT_FIXES.md) | [Русский](SECURITY_AUDIT_FIXES.ru.md) | **Deutsch**
+[English](SECURITY_AUDIT_FIXES.md) | [Русский](SECURITY_AUDIT_FIXES.ru.md) | **Deutsch**  
+*[← Back to README](../README.md) | [← Назад к README](../README.ru.md) | [← Zurück zu README](../README.de.md)*
 
 ## Überblick
 

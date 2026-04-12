@@ -1,6 +1,7 @@
 # Contributing to openwrt-extended-backup
 
-[English](CONTRIBUTING.md) | [Русский](CONTRIBUTING.ru.md) | [Deutsch](CONTRIBUTING.de.md)
+[English](CONTRIBUTING.md) | [Русский](CONTRIBUTING.ru.md) | [Deutsch](CONTRIBUTING.de.md)  
+*[← Back to README](../README.md) | [← Назад к README](../README.ru.md) | [← Zurück zu README](../README.de.md)*
 
 Thank you for your interest in contributing! This document provides guidelines for contributing to the project.
 

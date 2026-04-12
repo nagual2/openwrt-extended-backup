@@ -1,6 +1,7 @@
 # Исправления по результатам аудита безопасности — Сводный отчёт
 
-[English](SECURITY_AUDIT_FIXES.md) | **Русский** | [Deutsch](SECURITY_AUDIT_FIXES.de.md)
+[English](SECURITY_AUDIT_FIXES.md) | **Русский** | [Deutsch](SECURITY_AUDIT_FIXES.de.md)  
+*[← Back to README](../README.md) | [← Назад к README](../README.ru.md) | [← Zurück zu README](../README.de.md)*
 
 ## Обзор
 

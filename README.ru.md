@@ -1,6 +1,7 @@
 # Набор утилит расширенного резервного копирования OpenWrt
 
-[English](README.md) | **Русский** | [Deutsch](README.de.md)
+[English](README.md) | **Русский** | [Deutsch](README.de.md)  
+*[Contributing](docs/CONTRIBUTING.md) | [Участие](docs/CONTRIBUTING.ru.md) | [Mitwirken](docs/CONTRIBUTING.de.md) · [Security Audit](docs/SECURITY_AUDIT_FIXES.md) | [Аудит](docs/SECURITY_AUDIT_FIXES.ru.md) | [Audit](docs/SECURITY_AUDIT_FIXES.de.md)*
 
 [![CI](https://github.com/nagual2/openwrt-extended-backup/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/nagual2/openwrt-extended-backup/actions/workflows/ci.yml)
 

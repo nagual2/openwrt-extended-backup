@@ -1,6 +1,7 @@
 # OpenWrt erweitertes Backup-Toolkit
 
-[English](README.md) | [Русский](README.ru.md) | **Deutsch**
+[English](README.md) | [Русский](README.ru.md) | **Deutsch**  
+*[Contributing](docs/CONTRIBUTING.md) | [Участие](docs/CONTRIBUTING.ru.md) | [Mitwirken](docs/CONTRIBUTING.de.md) · [Security Audit](docs/SECURITY_AUDIT_FIXES.md) | [Аудит](docs/SECURITY_AUDIT_FIXES.ru.md) | [Audit](docs/SECURITY_AUDIT_FIXES.de.md)*
 
 [![CI](https://github.com/nagual2/openwrt-extended-backup/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/nagual2/openwrt-extended-backup/actions/workflows/ci.yml)
 
@@ -36,7 +37,7 @@ Alle Skripte befinden sich in [`scripts/`](./scripts/) und teilen Hilfsfunktione
 ### .ipk bauen und installieren
 
 ```
-make ipk            # baut dist/ctoolkit_<version>-1_all.ipk
+make ipk            # baut dist/openwrt-extended-backup_<version>-1_all.ipk
 make install        # installiert das generierte Paket mit opkg, falls verfügbar
 ```
 

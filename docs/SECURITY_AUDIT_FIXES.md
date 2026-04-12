@@ -1,6 +1,7 @@
 # Security Audit Fixes - Summary Report
 
-[English](SECURITY_AUDIT_FIXES.md) | [Русский](SECURITY_AUDIT_FIXES.ru.md) | [Deutsch](SECURITY_AUDIT_FIXES.de.md)
+[English](SECURITY_AUDIT_FIXES.md) | [Русский](SECURITY_AUDIT_FIXES.ru.md) | [Deutsch](SECURITY_AUDIT_FIXES.de.md)  
+*[← Back to README](../README.md) | [← Назад к README](../README.ru.md) | [← Zurück zu README](../README.de.md)*
 
 ## Overview
 
