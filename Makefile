@@ -111,6 +111,7 @@ $(IPK_PATH): scripts/openwrt_full_backup scripts/openwrt_restore scripts/openwrt
 > printf 'Section: utils\n' >> $(CONTROL_DIR)/control
 > printf 'Priority: optional\n' >> $(CONTROL_DIR)/control
 > printf 'Maintainer: openwrt-extended-backup maintainers\n' >> $(CONTROL_DIR)/control
+> printf 'License: GPL-2.0\n' >> $(CONTROL_DIR)/control
 > printf 'Depends: %s\n' "$(CONTROL_DEPENDS)" >> $(CONTROL_DIR)/control
 > printf 'Description: Backup, restore, and package listing toolkit for OpenWrt.\n' >> $(CONTROL_DIR)/control
 > tar -C $(DATA_DIR) -czf $(WORK_DIR)/data.tar.gz .

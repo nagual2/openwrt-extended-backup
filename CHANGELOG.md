@@ -6,7 +6,13 @@ Tagged releases are published via GitHub Actions and update this changelog along
 
 ## [Unreleased]
 
-_No changes yet._
+### Changed
+
+- Replaced the custom restrictive license with GPL-2.0 (full text from `openwrt/packages`), the standard license of the OpenWrt ecosystem; READMEs and the generated ipk `control` now reference GPL-2.0.
+
+### Added
+
+- Origin attribution in the READMEs: the project started as a fork of `kkkkCampbell/master` (unlicensed upstream; starting-point scripts since substantially rewritten).
 
 ## [0.2.0](https://github.com/nagual2/openwrt-extended-backup/compare/v0.1.0...v0.2.0) - 2025-10-27
 

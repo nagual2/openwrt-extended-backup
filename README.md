@@ -115,7 +115,7 @@ Release packaging (`make ipk`) installs `openwrt_full_backup`, `openwrt_restore`
 
 ## License
 
-This project is distributed under the terms of the [MIT License](./LICENSE).
+This project is licensed under the [GNU General Public License, version 2](./LICENSE) (GPL-2.0) — the standard license of the OpenWrt ecosystem.
 
 ## Origin & attribution
 

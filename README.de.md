@@ -115,7 +115,7 @@ Die Release-Paketierung (`make ipk`) installiert `openwrt_full_backup`, `openwrt
 
 ## Lizenz
 
-Dieses Projekt wird unter den Bedingungen der [MIT License](./LICENSE) vertrieben.
+Dieses Projekt steht unter der [GNU General Public License, Version 2](./LICENSE) (GPL-2.0) — der Standardlizenz des OpenWrt-Ökosystems.
 
 ## Ursprung
 
