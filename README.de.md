@@ -116,3 +116,7 @@ Die Release-Paketierung (`make ipk`) installiert `openwrt_full_backup`, `openwrt
 ## Lizenz
 
 Dieses Projekt wird unter den Bedingungen der [MIT License](./LICENSE) vertrieben.
+
+## Ursprung
+
+Dieses Projekt entstand als Fork von [kkkkCampbell/master](https://github.com/kkkkCampbell/master). Die ursprünglichen Skripte `openwrt_full_backup` und `user_installed_packages` dienten als Ausgangspunkt und wurden seitdem grundlegend überarbeitet; das ursprüngliche Repository hatte zum Fork-Zeitpunkt keine Lizenzdatei.

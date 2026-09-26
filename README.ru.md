@@ -116,3 +116,7 @@ make all    # сокращение для "make lint test"
 ## Лицензия
 
 Этот проект распространяется на условиях [MIT License](./LICENSE).
+
+## Происхождение
+
+Проект начался как форк [kkkkCampbell/master](https://github.com/kkkkCampbell/master). Исходные скрипты `openwrt_full_backup` и `user_installed_packages` использовались как отправная точка и с тех пор существенно переписаны; в исходном репозитории на момент форка не было файла лицензии.
